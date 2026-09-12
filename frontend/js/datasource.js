@@ -9,10 +9,10 @@
  * reports it and Demo Mode remains fully functional.
  */
 
-import { CONFIG, WS_URL } from './config.js';
+import { CONFIG, apiUrl, authHeaders, wsUrl } from './config.js';
 import { EVENT_LABELS } from '../data/mock-events.js';
 import {
-  addTimelineEvent, setAssessment, setCameraStatus, setConfidence, setCorroboration,
+  addTimelineEvent, guardianState, setCameraStatus, setConfidence, setCorroboration,
   setGuardianScore, setResponseState, update, upsertIncident
 } from './state.js';
 import { createEventSocket } from './websocket.js';
@@ -23,17 +23,29 @@ import { clockLabel } from './util.js';
  * Unknown fields are preserved; missing fields get safe defaults.
  */
 export function normalizeEvent(raw = {}) {
-  const eventType = raw.eventType || raw.type || 'normal';
+  const eventType = raw.eventType || raw.event_type || raw.type || 'normal';
+  // The CV pipeline sends the command-center fields alongside its legacy
+  // snake_case ones; fall back to the legacy pair if the rich fields are absent.
+  const confidence = raw.confidence ?? raw.overall_confidence;
+  const guardianScore = raw.guardianScore ?? raw.guardian_score
+    ?? (raw.fall_score !== undefined
+      ? clamp01(raw.fall_score) * 7 + clamp01(raw.immobility_score) * 3
+      : 0);
+  const trackingId = raw.trackingId || raw.track_id
+    || (raw.person_id !== undefined && raw.person_id !== null
+      ? `P-${String(Number(raw.person_id) + 1).padStart(2, '0')}`
+      : null);
+
   return {
     id: raw.id || `EVT-${Date.now()}`,
     timestamp: raw.timestamp || new Date().toISOString(),
-    trackingId: raw.trackingId || raw.track_id || null,
+    trackingId,
     cameraId: raw.cameraId || raw.camera_id || null,
     location: raw.location || '',
     eventType,
     label: raw.label || EVENT_LABELS[eventType] || eventType,
-    confidence: clamp01(raw.confidence),
-    guardianScore: Number(raw.guardianScore ?? raw.guardian_score ?? 0),
+    confidence: clamp01(confidence),
+    guardianScore: Number(guardianScore) || 0,
     status: raw.status || 'observing',
     durationMs: Number(raw.durationMs ?? raw.duration_ms ?? 0),
     boundingBox: raw.boundingBox || raw.bounding_box || null,
@@ -41,6 +53,24 @@ export function normalizeEvent(raw = {}) {
     temporalFeatures: raw.temporalFeatures || raw.temporal_features || null
   };
 }
+
+const RESPONSE_FOR_STATUS = {
+  normal: 'Monitoring',
+  observing: 'Monitoring — gathering temporal evidence',
+  elevated: 'Monitoring — gathering temporal evidence',
+  warning: 'Responder review suggested',
+  critical: 'Responder recommended',
+  resolved: 'Event resolved — no further action'
+};
+
+const TIMELINE_KIND_FOR_STATUS = {
+  normal: 'observation',
+  observing: 'observation',
+  elevated: 'inference',
+  warning: 'warning',
+  critical: 'critical',
+  resolved: 'resolved'
+};
 
 function clamp01(v) {
   const n = Number(v ?? 0);
@@ -53,12 +83,44 @@ export function createDataSource({ engine }) {
   let live = false;
 
   function setBackendStatus(status) {
+    const becameLive = status === 'connected' && !live;
     update({
       backendStatus: status,
-      dataSource: status === 'connected' ? 'live' : 'demo',
-      aiEngine: status === 'connected' ? 'active' : 'active'
+      dataSource: status === 'connected' ? 'live' : 'demo'
     });
     live = status === 'connected';
+    if (becameLive) goLive();
+  }
+
+  /**
+   * Hand the overlay over to the backend. The simulated baseline people are
+   * dropped so the stage shows only tracks the CV pipeline is actually
+   * reporting — otherwise fake figures walk around beside live ones.
+   */
+  function goLive() {
+    engine.reset();
+    situations.clear();
+    update({
+      // seeded demo nodes are cleared so the mesh shows only what the backend
+      // actually reports; cameras re-appear as their first events arrive
+      cameras: [],
+      sensors: [],
+      trackedPeople: [],
+      focusPersonId: null,
+      guardianScore: 0,
+      previousScore: 0,
+      confidence: 0,
+      scoreTrend: [],
+      eventType: 'normal',
+      eventLabel: 'Awaiting events',
+      incidents: [],
+      timeline: []
+    });
+    addTimelineEvent({
+      kind: 'system',
+      title: 'Live backend attached — streaming events from the CV pipeline.',
+      facts: [{ label: 'Source', value: 'Live' }]
+    });
   }
 
   /** Apply one normalised guardian event to shared state. */
@@ -95,13 +157,82 @@ export function createDataSource({ engine }) {
         setCorroboration(payload.entries || [], payload.result || null);
         return;
 
+      // The FastAPI backend wraps every CV detection as
+      // { type: "event", data: {...}, timestamp }. Unwrap before normalising.
+      case 'event':
+        applyEvent(normalizeEvent(payload.data || {}));
+        return;
+
+      case 'alert':
+        applyAlert(payload);
+        return;
+
       default:
         applyEvent(normalizeEvent(payload));
     }
   }
 
+  /**
+   * Threshold alerts. The backend emits one per qualifying frame, so only a
+   * change in level is worth a timeline entry.
+   */
+  let lastAlertLevel = new Map();
+  function applyAlert(payload) {
+    const camera = payload.camera_id || payload.cameraId;
+    const level = payload.level || 'high';
+    if (lastAlertLevel.get(camera) === level) return;
+    lastAlertLevel.set(camera, level);
+    const message = String(payload.message || '')
+      .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\uFE0F]/gu, '')
+      .trim();
+    addTimelineEvent({
+      kind: level === 'critical' ? 'critical' : 'warning',
+      title: message ? `Backend threshold alert — ${message}` : `Threshold alert raised on ${camera}.`,
+      facts: [{ label: 'Camera', value: camera || '—' }, { label: 'Level', value: level }]
+    });
+  }
+
+  /**
+   * Event correlator.
+   *
+   * The CV pipeline posts once per frame (~30/s), each with a unique event id.
+   * Treating those as separate incidents would spawn hundreds of cards, so an
+   * incident is keyed by the SITUATION — a tracked person on a camera — and the
+   * stream updates that one card as it escalates or resolves. The same guard
+   * keeps the timeline to genuine transitions rather than a per-frame log.
+   */
+  const situations = new Map();
+  let incidentSeq = 0;
+  const keyOf = (e) => `${e.cameraId || 'CAM'}:${e.trackingId || 'P'}`;
+
+  function correlate(event) {
+    const key = keyOf(event);
+    let situation = situations.get(key);
+
+    if (event.eventType === 'normal') {
+      if (!situation) return null;
+      // the situation returned to baseline: close it out once
+      situations.delete(key);
+      return { ...situation, closing: true };
+    }
+
+    if (!situation) {
+      incidentSeq += 1;
+      situation = {
+        id: `INC-${String(incidentSeq).padStart(3, '0')}`,
+        key,
+        startedAt: Date.now(),
+        status: null,
+        eventType: null
+      };
+      situations.set(key, situation);
+    }
+    return situation;
+  }
+
   /** A perception/classification event: drives score, confidence and incidents. */
   function applyEvent(event) {
+    // 1. perception — always forwarded, the overlay needs every frame
     if (event.keypoints?.length || event.boundingBox) {
       engine.applyExternalTrack({
         trackingId: event.trackingId,
@@ -125,43 +256,113 @@ export function createDataSource({ engine }) {
       });
     }
 
-    if (event.guardianScore) {
+    // 2. assessment — written only when a rendered value actually moved, so a
+    //    30 fps stream does not re-render the dashboard 30 times a second
+    const state = guardianState;
+    const scoreMoved = Math.abs(event.guardianScore - state.guardianScore) >= 0.1;
+    const confMoved = Math.abs(event.confidence - state.confidence) >= 0.01;
+    const focusMoved = Boolean(event.trackingId) && event.trackingId !== state.focusPersonId;
+    const labelMoved = event.label !== state.eventLabel;
+
+    if (scoreMoved || labelMoved || focusMoved) {
       setGuardianScore(event.guardianScore, {
         eventType: event.eventType,
         eventLabel: event.label,
-        focusPersonId: event.trackingId
+        ...(event.trackingId ? { focusPersonId: event.trackingId } : {})
       });
     }
-    if (event.confidence) setConfidence(event.confidence);
+    if (confMoved) setConfidence(event.confidence);
+
     if (event.cameraId) {
-      setCameraStatus(event.cameraId, { status: event.status, score: event.guardianScore });
+      const camera = state.cameras.find((c) => c.id === event.cameraId);
+      if (!camera) {
+        // A live camera the mesh has not seen before joins the mesh rather than
+        // being dropped: the backend names cameras (cam_02), the frontend's
+        // seed data does not have to know them in advance.
+        update({
+          cameras: state.cameras.concat({
+            id: event.cameraId,
+            label: String(event.cameraId).replace(/[_-]/g, ' ').toUpperCase(),
+            location: event.location || 'Live camera',
+            status: event.status,
+            people: 1,
+            score: event.guardianScore,
+            online: true
+          })
+        });
+      } else if (camera.status !== event.status
+        || Math.abs((camera.score ?? 0) - event.guardianScore) >= 0.1) {
+        setCameraStatus(event.cameraId, { status: event.status, score: event.guardianScore });
+      }
     }
-    if (event.eventType !== 'normal') {
-      setAssessment({ focusPersonId: event.trackingId });
+
+    // 3. incident + timeline — one situation per tracked person per camera
+    const situation = correlate(event);
+    if (!situation) return;
+
+    const immobilitySeconds = Math.round(
+      (event.temporalFeatures?.timeSinceMovementMs
+        ?? event.temporalFeatures?.groundDurationMs ?? 0) / 1000
+    );
+
+    if (situation.closing) {
       upsertIncident({
-        id: event.id.startsWith('INC') ? event.id : `INC-${event.id}`,
-        trackingId: event.trackingId,
-        eventType: event.eventType,
-        label: event.label,
-        cameraId: event.cameraId,
-        location: event.location,
-        confidence: event.confidence,
+        id: situation.id,
+        status: 'resolved',
+        label: `${situation.label || 'Event'} — resolved`,
         guardianScore: event.guardianScore,
-        status: event.status,
-        durationSeconds: Math.round(event.durationMs / 1000),
-        immobilitySeconds: Math.round((event.temporalFeatures?.groundDurationMs ?? 0) / 1000),
-        responseState: event.responseState || 'Monitoring',
-        timestamp: clockLabel(new Date(event.timestamp), false)
+        confidence: event.confidence,
+        responseState: 'Event resolved — no further action'
       });
       addTimelineEvent({
-        kind: event.status === 'critical' ? 'critical' : 'observation',
+        kind: 'resolved',
+        title: `${event.trackingId || 'Track'} returned to normal motion on ${event.cameraId || 'camera'}.`,
+        facts: [{ label: 'Score', value: event.guardianScore.toFixed(1) }]
+      });
+      return;
+    }
+
+    const transitioned = situation.status !== event.status
+      || situation.eventType !== event.eventType;
+
+    if (!situation.timestamp) {
+      situation.timestamp = clockLabel(new Date(event.timestamp), false);
+    }
+
+    upsertIncident({
+      id: situation.id,
+      trackingId: event.trackingId,
+      eventType: event.eventType,
+      label: event.label,
+      cameraId: event.cameraId,
+      location: event.location || cameraLocation(event.cameraId),
+      confidence: event.confidence,
+      guardianScore: event.guardianScore,
+      status: event.status,
+      durationSeconds: Math.round((Date.now() - situation.startedAt) / 1000),
+      immobilitySeconds,
+      responseState: RESPONSE_FOR_STATUS[event.status] || 'Monitoring',
+      timestamp: situation.timestamp
+    });
+
+    if (transitioned) {
+      situation.status = event.status;
+      situation.eventType = event.eventType;
+      situation.label = event.label;
+      addTimelineEvent({
+        kind: TIMELINE_KIND_FOR_STATUS[event.status] || 'observation',
         title: `${event.label} — ${event.trackingId || 'unknown track'} on ${event.cameraId || 'unknown camera'}.`,
         facts: [
           { label: 'Confidence', value: `${Math.round(event.confidence * 100)}%` },
-          { label: 'Score', value: Number(event.guardianScore).toFixed(1) }
+          { label: 'Score', value: Number(event.guardianScore).toFixed(1) },
+          ...(immobilitySeconds ? [{ label: 'Immobility', value: `${immobilitySeconds} s` }] : [])
         ]
       });
     }
+  }
+
+  function cameraLocation(cameraId) {
+    return guardianState.cameras.find((c) => c.id === cameraId)?.location || '';
   }
 
   /**
@@ -169,7 +370,8 @@ export function createDataSource({ engine }) {
    * @param {{force?: boolean}} opts force bypasses CONFIG.BACKEND_ENABLED, so
    *        window.guardian.connect() works without editing config.js.
    */
-  async function connect({ force = false } = {}) {
+  async function connect({ force = false, token } = {}) {
+    if (token) CONFIG.ACCESS_TOKEN = token;
     if (!CONFIG.BACKEND_ENABLED && !force) {
       // Stay fully offline: no fetch, no socket, nothing for the browser to log.
       console.info('[guardian] running on demo data (CONFIG.BACKEND_ENABLED is false). '
@@ -179,20 +381,32 @@ export function createDataSource({ engine }) {
     }
 
     setBackendStatus('connecting');
-    let reachable = !CONFIG.REQUIRE_API_PROBE || force;
+    // An explicit choice to connect is never overridden by the probe: the probe
+    // is subject to CORS, the WebSocket is not, so a blocked /api/status must
+    // not stop live events from arriving.
+    let reachable = force || CONFIG.BACKEND_ENABLED || !CONFIG.REQUIRE_API_PROBE;
 
     if (CONFIG.API_BASE) {
       try {
         const controller = new AbortController();
         const timer = window.setTimeout(() => controller.abort(), CONFIG.CONNECT_TIMEOUT_MS);
-        const res = await fetch(`${CONFIG.API_BASE}/status`, { signal: controller.signal });
+        const res = await fetch(apiUrl('/status'), {
+          signal: controller.signal,
+          headers: authHeaders()
+        });
         window.clearTimeout(timer);
         if (res.ok) {
           reachable = true;
           handleGuardianEvent({ type: 'status', ...(await res.json()) });
+          await loadCameras();
+        } else if (res.status === 401 || res.status === 403) {
+          console.warn('[guardian] backend rejected the request — set CONFIG.ACCESS_TOKEN '
+            + 'or call window.guardian.connect("<token>").');
         }
       } catch {
-        /* handled below */
+        console.info('[guardian] /api/status not readable (backend down, or its CORS '
+          + 'allow-list does not include this origin). The WebSocket is not subject to '
+          + 'CORS, so live events may still arrive.');
       }
     }
 
@@ -204,7 +418,7 @@ export function createDataSource({ engine }) {
     }
 
     socket = createEventSocket({
-      url: WS_URL,
+      url: wsUrl(),
       onEvent: handleGuardianEvent,
       onStatus: (status) => {
         if (status === 'connected') setBackendStatus('connected');
@@ -215,7 +429,42 @@ export function createDataSource({ engine }) {
     socket.connect();
   }
 
+  /**
+   * Seed the mesh panel from the backend's camera list. The backend reports
+   * activity, not geography, so a camera it has never seen keeps whatever
+   * location label the frontend already holds.
+   */
+  async function loadCameras() {
+    try {
+      const res = await fetch(apiUrl('/cameras'), { headers: authHeaders() });
+      if (!res.ok) return;
+      const body = await res.json();
+      const known = guardianState.cameras;
+      const merged = (body.cameras || []).map((cam) => {
+        const id = cam.camera_id || cam.cameraId;
+        const existing = known.find((c) => c.id === id);
+        return {
+          id,
+          label: existing?.label || String(id).toUpperCase().replace('_', ' '),
+          location: existing?.location || 'Unassigned',
+          status: existing?.status || 'normal',
+          people: existing?.people ?? 0,
+          score: existing?.score ?? 0,
+          online: cam.is_active !== false
+        };
+      });
+      // keep frontend-configured cameras the backend has not seen yet
+      const extra = known.filter((c) => !merged.some((m) => m.id === c.id));
+      if (merged.length) update({ cameras: merged.concat(extra) });
+    } catch {
+      /* mesh keeps its configured cameras */
+    }
+  }
+
   function disconnect() { socket?.close(); }
 
-  return { connect, disconnect, handleGuardianEvent, normalizeEvent, get live() { return live; } };
+  return {
+    connect, disconnect, handleGuardianEvent, normalizeEvent, loadCameras,
+    get live() { return live; }
+  };
 }

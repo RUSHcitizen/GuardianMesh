@@ -245,7 +245,14 @@
           </div>
         </div>
         <div class="panel__body">
-          <div class="node-grid" id="node-grid" aria-label="Camera and sensor nodes"></div>
+          <div>
+            <div class="node-grid" id="node-grid" aria-label="Camera and sensor nodes"></div>
+            <div class="empty-state" id="node-empty" hidden>
+              <span class="empty-state__icon" aria-hidden="true">◎</span>
+              <span class="empty-state__title">Awaiting camera nodes</span>
+              <span class="empty-state__hint">Nodes appear here as the backend reports activity.</span>
+            </div>
+          </div>
 
           <div class="subsection">
             <h3 class="subsection__title">Event corroboration</h3>

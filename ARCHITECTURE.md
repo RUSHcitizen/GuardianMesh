@@ -71,6 +71,7 @@ app.js ─┬─ camera.js ─┬─ scene.js ──────── data/pose
         ├─ incidents.js ─── guardian-score.js   (bandFor)
         ├─ mesh.js
         ├─ response.js
+        ├─ live-director.js ─── guardian-score.js
         └─ state.js
 
 leaves: util.js, config.js, data/*.js
@@ -262,12 +263,70 @@ A `max-height: 960px` pass compresses vertical rhythm for 900px-tall laptops.
 
 ---
 
+## 8b. The live path
+
+```
+ai_cv  ──POST /api/events──►  backend  ──ws /ws/all──►  datasource.js
+(MediaPipe pose →             (FastAPI,                  │
+ temporal features →           SQLite,                   ├─ unwrap envelope
+ event classifier →            fan-out)                  ├─ normalise
+ to_dashboard_dict)                                      ├─ correlate
+                                                         └─ state actions
+```
+
+Three things the adapter has to get right, all of them consequences of how the
+backend and CV pipeline actually behave:
+
+**1. The envelope.** The backend wraps every detection as
+`{ type: "event", data: {…}, timestamp }`, and emits `{ type: "alert", … }` when
+a score crosses a threshold. Both are unwrapped in `handleGuardianEvent`; alerts
+only reach the timeline when their level *changes*.
+
+**2. The channel.** The WebSocket route is `/ws/{client_id}` and the server fans
+out to the `all` channel plus a channel named after the camera. A dashboard must
+therefore subscribe as **`/ws/all`** — any other id connects successfully and
+then receives nothing, which is the most confusing possible failure.
+
+**3. Correlation.** The CV pipeline posts **once per frame (~30/s)**, each with a
+unique event id. Treating those as separate incidents would spawn hundreds of
+cards. `datasource.js` keys an incident by the **situation** — camera plus
+tracking ID — so one fall is one card that escalates and resolves, and the
+timeline records transitions rather than a per-frame log. The same pass guards
+every state write, so a 30 fps stream does not re-render the dashboard 30 times
+a second.
+
+### live-director.js
+
+Demo Mode scripts when the stage turns critical and when responders activate. A
+live backend streams detections and has no opinion about either, so
+`live-director.js` derives them from severity — and runs **only** when
+`dataSource === 'live'`, so it never fights the demo controller for the same
+panels. Stage status takes the more severe of the classifier's status and the
+Guardian Score band, because a classifier may still call sustained immobility a
+warning after severity has reached the critical band.
+
+Attaching a live backend also clears the seeded demo cameras, sensors and
+people, so the mesh and overlay show only what the backend actually reports.
+Cameras the frontend has never heard of join the mesh on their first event.
+
+### Choosing a data source
+
+| URL | Source |
+|---|---|
+| `/` | Demo Mode — no network requests at all |
+| `/?live` | Attach the live backend |
+| `/?live&token=…` | Attach a token-protected backend |
+
+---
+
 ## 9. Where to plug things in
 
 | Goal | Touch |
 |---|---|
 | Feed real CV output | `engine.applyExternalTrack()`, or WS `type: "tracks"` |
-| Feed a real backend | `CONFIG.BACKEND_ENABLED`, then WS frames |
+| Feed a real backend | open `/?live`, or set `CONFIG.BACKEND_ENABLED` |
+| Point at another backend | `CONFIG.BACKEND_ORIGIN` / `WS_CLIENT_ID` / `ACCESS_TOKEN` |
+| Change live→UI behaviour | `js/live-director.js` |
 | Change the demo story | `js/demo.js` — the steps array |
 | Change any demo value | `data/mock-events.js` |
 | Change severity maths | `computeGuardianScore()` in `js/guardian-score.js` |

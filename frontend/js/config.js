@@ -18,11 +18,34 @@ export const CONFIG = {
    */
   BACKEND_ENABLED: false,
 
-  /** Backend REST base. Set to null to disable probing entirely. */
+  /**
+   * Where the backend lives. It runs on its own port (uvicorn defaults to
+   * 127.0.0.1:8000) while the frontend is served separately, so this must be
+   * absolute. Set to null to use the page's own origin instead — useful if
+   * you put both behind one reverse proxy.
+   */
+  BACKEND_ORIGIN: 'http://127.0.0.1:8000',
+
+  /** REST base, resolved against BACKEND_ORIGIN. */
   API_BASE: '/api',
 
-  /** Realtime event stream. Resolved against the current host. */
-  WS_PATH: '/ws/events',
+  /** WebSocket route prefix. The backend endpoint is /ws/{client_id}. */
+  WS_PATH: '/ws',
+
+  /**
+   * WebSocket client id. The backend fans events out to the "all" channel and
+   * to a channel named after the camera, so a dashboard MUST subscribe as
+   * "all" — any other id receives nothing.
+   */
+  WS_CLIENT_ID: 'all',
+
+  /**
+   * Matches GUARDIANMESH_ACCESS_TOKEN on the backend. When the backend has a
+   * token configured, REST needs `Authorization: Bearer <token>` and the
+   * socket needs `?token=<token>`. Leave null when the backend is unprotected;
+   * you can also pass it at runtime: window.guardian.connect('<token>').
+   */
+  ACCESS_TOKEN: null,
 
   /** How long to wait for backend/WS before declaring the demo the data source. */
   CONNECT_TIMEOUT_MS: 2500,
@@ -69,8 +92,29 @@ export const CONFIG = {
   TREND_SAMPLES: 90
 };
 
-export const WS_URL = (() => {
-  if (typeof window === 'undefined') return null;
-  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${proto}//${window.location.host}${CONFIG.WS_PATH}`;
-})();
+/** Origin the backend is reached on — explicit, or the page's own. */
+export function backendOrigin() {
+  if (CONFIG.BACKEND_ORIGIN) return CONFIG.BACKEND_ORIGIN.replace(/\/$/, '');
+  return typeof window === 'undefined' ? '' : window.location.origin;
+}
+
+/** Absolute REST URL, e.g. apiUrl('/status'). */
+export function apiUrl(path = '') {
+  return `${backendOrigin()}${CONFIG.API_BASE}${path}`;
+}
+
+/** Absolute WebSocket URL including the client id and optional token. */
+export function wsUrl() {
+  const base = backendOrigin().replace(/^http/, 'ws');
+  const url = `${base}${CONFIG.WS_PATH}/${encodeURIComponent(CONFIG.WS_CLIENT_ID)}`;
+  return CONFIG.ACCESS_TOKEN
+    ? `${url}?token=${encodeURIComponent(CONFIG.ACCESS_TOKEN)}`
+    : url;
+}
+
+/** Headers for REST calls, carrying the bearer token when one is configured. */
+export function authHeaders() {
+  return CONFIG.ACCESS_TOKEN
+    ? { Authorization: `Bearer ${CONFIG.ACCESS_TOKEN}` }
+    : {};
+}

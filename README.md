@@ -215,22 +215,63 @@ normalises, including every accepted WebSocket frame type, is documented in
 
 ### Wiring the frontend to this backend
 
-The backend listens on `127.0.0.1:8000` while the frontend is served separately,
-so point the frontend at it explicitly in `frontend/js/config.js`:
+The three parts are wired and verified end to end:
 
-```js
-BACKEND_ENABLED: true,
-API_BASE: 'http://127.0.0.1:8000/api',
+```
+ai_cv (MediaPipe pose → temporal features → event classifier)
+  └─ POST /api/events ─→ backend (FastAPI, SQLite, WebSocket fan-out)
+                           └─ ws://…/ws/all ─→ frontend command center
 ```
 
-Paths already line up: the frontend probes `GET /api/status` and opens
-`/ws/events`, both of which this backend serves. Two things still to check:
+**Run all three:**
 
-- **CORS** — `GUARDIANMESH_ALLOWED_ORIGINS` defaults to `:5500`. Add whatever
-  origin serves the frontend (`http://localhost:8080` for `npm start`).
-- **Token** — when `GUARDIANMESH_ACCESS_TOKEN` is set, REST needs
-  `Authorization: Bearer <token>` and the socket needs `/ws/events?token=<token>`.
-  The frontend client does not send either yet.
+```powershell
+# 1. backend
+python3.9 -m uvicorn backend.backend_server:app --host 127.0.0.1 --port 8000
+
+# 2. frontend
+npm start                         # http://localhost:8080
+
+# 3. camera inference
+python3.9 -m ai_cv.guardian_mesh_inference --source 0 --camera_id cam_01 \
+  --no_viz --api_url http://127.0.0.1:8000
+```
+
+Then open **<http://localhost:8080/?live>**.
+
+| URL | Data source |
+|---|---|
+| `http://localhost:8080/` | Demo Mode — makes no network requests at all |
+| `http://localhost:8080/?live` | Attaches the live backend |
+| `http://localhost:8080/?live&token=…` | Attaches a token-protected backend |
+
+No file edits are needed to switch. `window.guardian.connect('<token>')` does the
+same thing from the console, and `CONFIG.BACKEND_ENABLED: true` in
+`frontend/js/config.js` makes live the default.
+
+**What the frontend does with the stream**
+
+- The backend wraps each detection as `{ type: "event", data: {…} }`; the adapter
+  unwraps it. `{ type: "alert", … }` frames become timeline entries on level change.
+- It subscribes as **`/ws/all`**. The backend fans out to the `all` channel and to
+  a channel named after the camera, so any other client id receives nothing.
+- The CV pipeline posts **once per frame (~30/s)**. The adapter correlates by
+  *situation* (camera + tracking ID), so a fall is one incident card that escalates
+  and resolves — not hundreds of cards — and the timeline records transitions only.
+- Cameras the frontend has never heard of (`cam_07`) join the mesh automatically on
+  their first event.
+- Attaching a live backend clears the seeded demo cameras and people, so the mesh
+  and overlay show only what the backend is actually reporting.
+- The legacy `fall_score` / `immobility_score` / `overall_confidence` fields are
+  accepted as a fallback when the command-center fields are absent.
+
+**Two operational notes**
+
+- **CORS** — `GUARDIANMESH_ALLOWED_ORIGINS` now includes `:8080` and `:5500` by
+  default. The WebSocket is not subject to CORS, so live events still arrive even
+  if the REST probe is blocked.
+- **Token** — when `GUARDIANMESH_ACCESS_TOKEN` is set, the frontend sends
+  `Authorization: Bearer <token>` on REST and `?token=<token>` on the socket.
 
 ## Validation
 

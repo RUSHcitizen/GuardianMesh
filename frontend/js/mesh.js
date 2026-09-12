@@ -19,6 +19,7 @@ const STATE_LABELS = {
 
 export function createMeshPanel() {
   const grid = $('#node-grid');
+  const gridEmpty = $('#node-empty');
   const summary = $('#mesh-summary');
   const corrList = $('#corr-list');
   const corrEmpty = $('#corr-empty');
@@ -59,11 +60,14 @@ export function createMeshPanel() {
       ...state.sensors.map((s) => buildNode(s, false))
     ];
     grid.replaceChildren(...nodes);
+    show(gridEmpty, nodes.length === 0);
 
     const all = [...state.cameras, ...state.sensors];
     const online = all.filter((n) => n.online !== false).length;
     const alerting = state.cameras.filter((c) => c.status === 'critical' || c.status === 'warning').length;
-    summary.textContent = `${all.length} nodes · ${online} online${alerting ? ` · ${alerting} alerting` : ''}`;
+    summary.textContent = all.length
+      ? `${all.length} nodes · ${online} online${alerting ? ` · ${alerting} alerting` : ''}`
+      : 'No nodes reporting';
   }
 
   function renderCorroboration(state) {

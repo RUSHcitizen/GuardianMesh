@@ -62,14 +62,6 @@ export function seedBaseline(ctx) {
   });
 
   camera?.setStatus('normal');
-  setCameraBadge('normal', 'Normal');
-}
-
-function setCameraBadge(status, label) {
-  const badge = document.getElementById('camera-badge');
-  if (!badge) return;
-  badge.dataset.status = status;
-  badge.textContent = label;
 }
 
 function fact(label, value) { return { label, value }; }
@@ -141,7 +133,6 @@ export function createDemo(ctx) {
         setConfidence(0.28);
         setCameraStatus('CAM-02', { status: 'observing', score: 2.8 });
         camera.setStatus('observing');
-        setCameraBadge('observing', 'Observing');
         addTimelineEvent({
           kind: 'observation',
           title: 'Rapid vertical displacement detected — abrupt change in movement pattern.',
@@ -172,8 +163,8 @@ export function createDemo(ctx) {
         meta({ status: 'warning', label: 'Possible fall', confidence: 0.61, score: 4.6 });
         setGuardianScore(4.6, { eventType: 'fall', eventLabel: 'Possible fall' });
         setConfidence(0.61);
+        camera.setStatus('warning');
         setCameraStatus('CAM-02', { status: 'warning', score: 4.6 });
-        setCameraBadge('warning', 'Elevated');
         incident({
           status: 'elevated',
           label: 'Possible fall — pattern under observation',
@@ -264,7 +255,6 @@ export function createDemo(ctx) {
         meta({ status: 'critical', label: 'Possible distress pattern', confidence: 0.94, score: 8.7 });
         camera.setStatus('critical');
         camera.pulseCritical();
-        setCameraBadge('critical', 'Critical');
       }
     },
     {
@@ -385,8 +375,7 @@ export function createDemo(ctx) {
         setGuardianScore(6.0, { eventLabel: 'Movement resumed', eventType: 'immobility' });
         setConfidence(0.7);
         setAssessment({ motionState: 'Resuming' });
-        camera.setStatus('observing');
-        setCameraBadge('warning', 'Elevated');
+        camera.setStatus('warning');
         setCameraStatus('CAM-02', { status: 'warning', score: 6.0 });
         incident({
           status: 'resolving',
@@ -432,7 +421,6 @@ export function createDemo(ctx) {
         setConfidence(0);
         setAssessment({ motionState: 'Normal' });
         camera.setStatus('normal');
-        setCameraBadge('normal', 'Normal');
         setCameraStatus('CAM-02', { status: 'normal', score: 1.8 });
         incident({
           status: 'resolved',
@@ -519,7 +507,6 @@ export function createDemo(ctx) {
     setCorroboration([], null);
     setHandoff(null);
     camera.setStatus('normal');
-    setCameraBadge('normal', 'Normal');
     notify();
   }
 

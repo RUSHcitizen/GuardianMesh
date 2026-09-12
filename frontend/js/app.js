@@ -11,6 +11,7 @@ import { createCamera } from './camera.js';
 import { createDataSource } from './datasource.js';
 import { createDemo, seedBaseline } from './demo.js';
 import { createIncidentFeed } from './incidents.js';
+import { createLiveDirector } from './live-director.js';
 import { createMeshPanel } from './mesh.js';
 import { createPoseEngine } from './pose-engine.js';
 import { createResponsePanel } from './response.js';
@@ -47,6 +48,10 @@ const panels = {
 
 const dataSource = createDataSource({ engine });
 const demo = createDemo({ engine, camera });
+
+// Derives stage status and the simulated response workflow from severity when
+// the data source is live; inert while Demo Mode owns those panels.
+const liveDirector = createLiveDirector({ camera });
 
 /* -------------------------------------------------------------------------
    State → UI routing
@@ -218,6 +223,7 @@ btnStart.addEventListener('click', () => {
 btnStep.addEventListener('click', () => demo.next());
 btnReset.addEventListener('click', () => {
   panels.score.reset();
+  liveDirector.reset();
   demo.reset();
   lastImmobility = -1;
   lastSignature = '';
@@ -287,17 +293,26 @@ renderAll();
 camera.resize();
 window.requestAnimationFrame(frame);
 
-// Optional live backend. Failure is expected during offline demos and is
-// reported in the header rather than breaking anything.
-dataSource.connect();
+// Data source selection, without editing any file:
+//   http://localhost:8080/            → Demo Mode (no network at all)
+//   http://localhost:8080/?live       → attach the live backend
+//   http://localhost:8080/?live&token=… → attach a token-protected backend
+// Failure is expected during offline demos and is reported in the header
+// rather than breaking anything.
+const params = new URLSearchParams(window.location.search);
+if (params.has('live')) {
+  dataSource.connect({ force: true, token: params.get('token') || undefined });
+} else {
+  dataSource.connect();
+}
 
 // Small console surface for debugging during the hackathon.
 window.guardian = {
   snapshot, demo, engine, camera, dataSource,
   emit: (payload) => dataSource.handleGuardianEvent(payload),
   score: (v) => update({ previousScore: guardianState.guardianScore, guardianScore: round(v, 1) }),
-  /** Attach a live backend without editing config.js. */
-  connect: () => dataSource.connect({ force: true }),
+  /** Attach a live backend without editing config.js: guardian.connect('token'). */
+  connect: (token) => dataSource.connect({ force: true, token }),
   disconnect: () => dataSource.disconnect()
 };
 window.__GUARDIAN_BOOTED__ = true;

@@ -138,8 +138,19 @@ export function createCamera(refs) {
 
   /* -- stage status / rendering -------------------------------------------- */
 
-  function setStatus(status) {
+  const STAGE_LABELS = {
+    normal: 'Normal', observing: 'Observing', elevated: 'Elevated',
+    warning: 'Elevated', critical: 'Critical', offline: 'Offline'
+  };
+
+  /** Set the stage state and the panel badge together. */
+  function setStatus(status, label) {
     stage.dataset.status = status;
+    const badge = document.getElementById('camera-badge');
+    if (badge) {
+      badge.dataset.status = status;
+      badge.textContent = label || STAGE_LABELS[status] || status;
+    }
   }
 
   function pulseCritical() {

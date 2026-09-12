@@ -219,7 +219,9 @@ export function snapshot() {
       guardianScore: round(guardianState.guardianScore, 1),
       trackedPeople: guardianState.trackedPeople.map((p) => ({
         trackingId: p.trackingId,
-        state: p.state,
+        cameraId: p.cameraId,
+        status: p.status,
+        label: p.label,
         boundingBox: p.boundingBox
       }))
     })
