@@ -238,7 +238,14 @@ async function googlePlaces(apiKey, lat, lng, limit, radiusM) {
   });
 
   if (!response.ok) {
-    throw new Error(`Google Places returned HTTP ${response.status}`);
+    // Google's error message names the rejected field/type; it never echoes the key.
+    let detail = '';
+    try {
+      detail = (await response.json())?.error?.message || '';
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new Error(`Google Places returned HTTP ${response.status}${detail ? `: ${detail.slice(0, 300)}` : ''}`);
   }
 
   const data = await response.json();
