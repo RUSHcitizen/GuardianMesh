@@ -48,7 +48,7 @@ class PoseTracker:
     MediaPipe-based pose tracker with:
     - Single-person MediaPipe Pose detection
     - Per-person tracking (ID assignment)
-    - Keypoint smoothing (Kalman filtering)
+    - Keypoint smoothing (exponential moving average)
     - Confidence filtering
     """
     
@@ -242,7 +242,9 @@ class PoseTracker:
             
             if best_match_idx >= 0:
                 # Update existing track
-                self.tracked_poses[person_id] = detections[best_match_idx]
+                self.tracked_poses[person_id] = self._smooth_pose(
+                    pose, detections[best_match_idx]
+                )
                 self.tracked_poses[person_id].person_id = person_id
                 self.person_age[person_id] += 1
                 self.frames_since_seen[person_id] = 0
@@ -260,6 +262,30 @@ class PoseTracker:
                 self.next_person_id += 1
 
         return seen_ids
+
+    def _smooth_pose(self, previous: Pose, current: Pose) -> Pose:
+        """Blend matched landmarks to reduce one-frame pose jitter."""
+        alpha = float(np.clip(self.smoothing_alpha, 0.0, 1.0))
+        keypoints = {}
+        for name, point in current.keypoints.items():
+            old = previous.keypoints.get(name)
+            if old is None:
+                keypoints[name] = point
+                continue
+            keypoints[name] = Keypoint(
+                x=alpha * point.x + (1.0 - alpha) * old.x,
+                y=alpha * point.y + (1.0 - alpha) * old.y,
+                z=alpha * point.z + (1.0 - alpha) * old.z,
+                confidence=point.confidence,
+            )
+
+        xs = [point.x for point in keypoints.values()]
+        ys = [point.y for point in keypoints.values()]
+        return Pose(
+            keypoints=keypoints,
+            confidence=current.confidence,
+            bbox=(min(xs), min(ys), max(xs), max(ys)),
+        )
     
     def _bbox_iou(self, bbox1: Tuple, bbox2: Tuple) -> float:
         """Compute Intersection over Union of two bboxes"""
