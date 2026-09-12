@@ -70,6 +70,31 @@ function updateFor(detector, durationMs, patch, stepMs = 100) {
   assert.equal(detector.state, FALL_STATES.NORMAL);
 }
 
+// Already resting on the floor is not a detected fall without a preceding
+// descent. This can be exercise, stretching, or another ordinary activity.
+{
+  const detector = createFallDetector();
+  const incidentStates = new Set([
+    FALL_STATES.GROUND,
+    FALL_STATES.IMMOBILE,
+    FALL_STATES.POSSIBLE_DISTRESS
+  ]);
+
+  for (let elapsed = 100; elapsed <= 8000; elapsed += 100) {
+    const result = detector.update({
+      ...base,
+      bodyAngle: 78,
+      boundingBoxRatio: 1.5,
+      centerY: 0.74,
+      boundingBoxBottom: 0.97,
+      groundDurationMs: elapsed,
+      timeSinceMovementMs: elapsed,
+      motionMagnitude: 0.01
+    }, 100);
+    assert.equal(incidentStates.has(result.state), false);
+  }
+}
+
 // A fall/collapse-like example requires a temporal sequence and escalates only
 // after remaining down. Pose-only inference does not diagnose a heart attack.
 {
