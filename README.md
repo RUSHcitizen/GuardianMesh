@@ -59,6 +59,45 @@ simulated response → movement resumed → resolved.
 RESET cancels the sequence, clears incidents/timeline/corroboration, resets the
 score, restores every camera and responder node, and returns the stage to normal.
 
+## Deploying the dashboard (Cloudflare Pages)
+
+The command center is static — HTML, CSS and ES modules, no build step, no
+dependencies — so deploying it is just serving `frontend/`.
+
+**Pages project settings**
+
+| Setting | Value |
+|---|---|
+| Root directory | `frontend` |
+| Build command | *(leave empty)* |
+| Build output directory | `/` |
+
+`wrangler.toml` declares the output directory in-repo, but **the root directory
+is a project setting and has to be set once in the dashboard.**
+
+**Why it matters.** With the root directory left at the repository root,
+Cloudflare's build image auto-detects `requirements.txt` and runs
+`pip install -r requirements.txt` — pulling opencv, mediapipe and torch to
+publish a static page. That build fails:
+
+```
+ERROR: Could not find a version that satisfies the requirement mediapipe==0.10.8
+       (from versions: 0.10.30, ... 1.0.1)
+```
+
+**Do not fix this by raising the mediapipe pin.** `0.10.8` is the last release
+that still exposes the `mp.solutions` API `ai_cv/pose_tracker.py` is built on —
+verified: `0.10.30` and `1.0.1` both drop it and crash the tracker at startup.
+Raising the pin would trade a visible build failure for a silent runtime one.
+Point the build at `frontend/` instead, or set the build variable
+`SKIP_DEPENDENCY_INSTALL=1`.
+
+**What gets deployed.** Demo Mode, which makes no network requests at all — so
+the published page is fully self-contained. `?live` only works where the
+browser can reach the backend; on an HTTPS deployment an `http://` backend is
+blocked as mixed content, and the dashboard now says so in the console instead
+of hanging.
+
 ## Project layout
 
 ```

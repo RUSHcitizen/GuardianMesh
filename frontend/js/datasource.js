@@ -9,7 +9,7 @@
  * reports it and Demo Mode remains fully functional.
  */
 
-import { CONFIG, apiUrl, authHeaders, wsUrl } from './config.js';
+import { CONFIG, apiUrl, authHeaders, backendOrigin, wsUrl } from './config.js';
 import { EVENT_LABELS } from '../data/mock-events.js';
 import {
   addTimelineEvent, guardianState, setCameraStatus, setConfidence, setCorroboration,
@@ -410,6 +410,19 @@ export function createDataSource({ engine }) {
       // Stay fully offline: no fetch, no socket, nothing for the browser to log.
       console.info('[guardian] running on demo data (CONFIG.BACKEND_ENABLED is false). '
         + 'Run window.guardian.connect() to attach a live backend.');
+      setBackendStatus('disconnected');
+      return;
+    }
+
+    // A page served over HTTPS cannot reach an http:// backend: the browser
+    // blocks it as mixed content, with no useful error on the page. Say so
+    // rather than leaving the operator watching a dashboard that never fills.
+    if (typeof window !== 'undefined'
+      && window.location.protocol === 'https:'
+      && backendOrigin().startsWith('http://')) {
+      console.warn(`[guardian] cannot reach ${backendOrigin()} from an HTTPS page — `
+        + 'browsers block mixed content. Serve the backend over HTTPS, or open the '
+        + 'dashboard over http:// for a local backend. Staying on demo data.');
       setBackendStatus('disconnected');
       return;
     }
