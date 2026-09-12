@@ -794,7 +794,7 @@ Write-Host "`nPublic status:" -ForegroundColor Cyan
 Invoke-RestMethod "http://127.0.0" | Format-List
 
 Write-Host "Public health:" -ForegroundColor Cyan
-Invoke-RestMethod "$public/health" | Format-List
+Invoke-RestMethod "http://127.0.0" | Format-List
 
 Write-Host "`nDONE." -ForegroundColor Green
 Write-Host "Open: $public"
