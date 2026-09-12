@@ -791,7 +791,7 @@ if ($secretsChanged) {
 $public = "https://guardianmesh.kumariaaatharv.workers.dev"
 
 Write-Host "`nPublic status:" -ForegroundColor Cyan
-Invoke-RestMethod "$public/api/status" | Format-List
+Invoke-RestMethod "http://127.0.0" | Format-List
 
 Write-Host "Public health:" -ForegroundColor Cyan
 Invoke-RestMethod "$public/health" | Format-List
