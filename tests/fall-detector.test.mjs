@@ -30,6 +30,22 @@ function updateFor(detector, durationMs, patch, stepMs = 100) {
   assert.ok(computeGuardianScore({ ...base, timeSinceMovementMs: 5000 }, result.state) < 3);
 }
 
+// Chewing/talking can create noisy face landmarks and a single bad pose frame.
+// Neither ordinary upper-body motion nor that one-frame jump may elevate.
+{
+  const detector = createFallDetector();
+  updateFor(detector, 2000, (elapsed) => ({
+    bodyAngle: 9 + (elapsed % 300) / 30,
+    motionMagnitude: 0.08,
+    verticalVelocity: elapsed === 1000 ? -0.7 : 0,
+    descentDistance: elapsed === 1000 ? 0.09 : 0
+  }));
+  assert.equal(detector.state, FALL_STATES.NORMAL);
+  assert.ok(computeGuardianScore({
+    ...base, verticalVelocity: -0.7, descentDistance: 0.09, motionMagnitude: 0.08
+  }, detector.state) < 3);
+}
+
 // A crouch may be observed but returns to normal without becoming an incident.
 {
   const detector = createFallDetector();
@@ -42,32 +58,47 @@ function updateFor(detector, durationMs, patch, stepMs = 100) {
   assert.equal(detector.state, FALL_STATES.NORMAL);
 }
 
-// A fall requires a temporal sequence and escalates only after remaining down.
+// A stumble/lean without a ground-level horizontal posture returns to normal.
 {
   const detector = createFallDetector();
-  detector.update({ ...base, verticalVelocity: -0.72, descentDistance: 0.18, bodyAngle: 34 }, 100);
+  updateFor(detector, 400, () => ({
+    verticalVelocity: -0.52, descentDistance: 0.08, bodyAngle: 44,
+    centerY: 0.52, boundingBoxBottom: 0.78, motionMagnitude: 0.14
+  }));
+  assert.equal(detector.state, FALL_STATES.RAPID_DESCENT);
+  updateFor(detector, 2200, () => ({ motionMagnitude: 0.1 }));
+  assert.equal(detector.state, FALL_STATES.NORMAL);
+}
+
+// A fall/collapse-like example requires a temporal sequence and escalates only
+// after remaining down. Pose-only inference does not diagnose a heart attack.
+{
+  const detector = createFallDetector();
+  detector.update({ ...base, verticalVelocity: -0.72, descentDistance: 0.18, bodyAngle: 42 }, 100);
+  detector.update({ ...base, verticalVelocity: -0.72, descentDistance: 0.2, bodyAngle: 48 }, 100);
+  detector.update({ ...base, verticalVelocity: -0.68, descentDistance: 0.22, bodyAngle: 55 }, 100);
   assert.equal(detector.state, FALL_STATES.RAPID_DESCENT);
 
-  updateFor(detector, 600, (elapsed) => ({
+  updateFor(detector, 700, (elapsed) => ({
     bodyAngle: 76, boundingBoxRatio: 1.45, centerY: 0.72, boundingBoxBottom: 0.96,
     groundDurationMs: elapsed, timeSinceMovementMs: 0, motionMagnitude: 0.12
   }));
   assert.equal(detector.state, FALL_STATES.GROUND);
 
-  updateFor(detector, 1800, (elapsed) => ({
+  updateFor(detector, 2400, (elapsed) => ({
     bodyAngle: 76, boundingBoxRatio: 1.45, centerY: 0.72, boundingBoxBottom: 0.96,
-    groundDurationMs: 600 + elapsed, timeSinceMovementMs: elapsed, motionMagnitude: 0.01
+    groundDurationMs: 700 + elapsed, timeSinceMovementMs: elapsed, motionMagnitude: 0.01
   }));
   assert.equal(detector.state, FALL_STATES.IMMOBILE);
 
-  updateFor(detector, 2000, (elapsed) => ({
+  updateFor(detector, 2500, (elapsed) => ({
     bodyAngle: 76, boundingBoxRatio: 1.45, centerY: 0.72, boundingBoxBottom: 0.96,
-    groundDurationMs: 2400 + elapsed, timeSinceMovementMs: 1800 + elapsed, motionMagnitude: 0.01
+    groundDurationMs: 3100 + elapsed, timeSinceMovementMs: 2400 + elapsed, motionMagnitude: 0.01
   }));
   assert.equal(detector.state, FALL_STATES.POSSIBLE_DISTRESS);
   assert.ok(computeGuardianScore({
-    ...base, bodyAngle: 76, boundingBoxRatio: 1.45, groundDurationMs: 4400,
-    timeSinceMovementMs: 3800, motionMagnitude: 0.01
+    ...base, bodyAngle: 76, boundingBoxRatio: 1.45, groundDurationMs: 5600,
+    timeSinceMovementMs: 4900, motionMagnitude: 0.01
   }, detector.state) >= 8.6);
 
   detector.update({ ...base, motionMagnitude: 0.16 }, 100);

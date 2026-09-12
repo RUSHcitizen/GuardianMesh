@@ -39,6 +39,8 @@ export function createFallDetector(thresholds = CONFIG.THRESHOLDS) {
   let state = FALL_STATES.NORMAL;
   let stateElapsedMs = 0;
   let uprightElapsedMs = 0;
+  let descentEvidenceMs = 0;
+  let instabilityEvidenceMs = 0;
 
   function transition(next) {
     if (next === state) return false;
@@ -53,8 +55,13 @@ export function createFallDetector(thresholds = CONFIG.THRESHOLDS) {
     stateElapsedMs += dt;
 
     const downwardSpeed = Math.max(0, -(features.verticalVelocity || 0));
-    const rapidDescent = downwardSpeed >= thresholds.rapidDropVelocity
-      || (features.descentDistance || 0) >= thresholds.rapidDropDistance;
+    const descentDistance = features.descentDistance || 0;
+    // A single noisy pose frame must never look like a fall. Fast movement is
+    // meaningful only when the torso also travels a minimum distance; a larger
+    // multi-frame displacement can stand on its own.
+    const descentSample = descentDistance >= thresholds.rapidDropDistance
+      || (downwardSpeed >= thresholds.rapidDropVelocity
+        && descentDistance >= thresholds.rapidDropMinDistance);
     const horizontal = (features.bodyAngle || 0) >= thresholds.torsoHorizontalAngle
       || (features.boundingBoxRatio || 0) >= thresholds.horizontalBoxRatio;
     const nearGround = (features.centerY || 0) >= thresholds.groundCenterY
@@ -67,12 +74,17 @@ export function createFallDetector(thresholds = CONFIG.THRESHOLDS) {
       && !nearGround;
 
     uprightElapsedMs = upright ? uprightElapsedMs + dt : 0;
+    descentEvidenceMs = descentSample ? descentEvidenceMs + dt : 0;
+    const instabilitySample = (features.bodyAngle || 0) >= thresholds.instabilityAngle
+      && (descentDistance >= thresholds.instabilityMinDescent || nearGround);
+    instabilityEvidenceMs = instabilitySample ? instabilityEvidenceMs + dt : 0;
+    const rapidDescent = descentEvidenceMs >= thresholds.rapidDropConfirmationMs;
+    const instability = instabilityEvidenceMs >= thresholds.instabilityConfirmationMs;
 
     switch (state) {
       case FALL_STATES.NORMAL:
         if (rapidDescent) transition(FALL_STATES.RAPID_DESCENT);
-        else if ((features.bodyAngle || 0) >= thresholds.instabilityAngle
-          || (features.descentDistance || 0) >= thresholds.rapidDropDistance * 0.55) {
+        else if (instability) {
           transition(FALL_STATES.INSTABILITY);
         }
         break;
@@ -129,6 +141,7 @@ export function createFallDetector(thresholds = CONFIG.THRESHOLDS) {
       state,
       stateElapsedMs,
       rapidDescent,
+      instability,
       horizontal,
       nearGround,
       grounded,
@@ -141,6 +154,8 @@ export function createFallDetector(thresholds = CONFIG.THRESHOLDS) {
     state = FALL_STATES.NORMAL;
     stateElapsedMs = 0;
     uprightElapsedMs = 0;
+    descentEvidenceMs = 0;
+    instabilityEvidenceMs = 0;
   }
 
   return { update, reset, get state() { return state; } };

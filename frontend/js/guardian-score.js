@@ -66,6 +66,12 @@ export function computeGuardianScore(f, fallState = 'NORMAL') {
   }[fallState] ?? 0;
   score = Math.max(score, floor);
 
+  // Raw landmark jitter can briefly resemble a fast movement. The detector's
+  // confirmed temporal state is the gate: ordinary motion stays low and an
+  // unconfirmed lean stays below the Elevated band.
+  if (fallState === 'NORMAL') score = Math.min(score, 1.9);
+  if (fallState === 'INSTABILITY') score = Math.min(score, 2.9);
+
   return clamp(round(score, 1), 0, 10);
 }
 
