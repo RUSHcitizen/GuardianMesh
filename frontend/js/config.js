@@ -122,6 +122,8 @@ export const CONFIG = {
     groundConfirmationMs: 600,
     immobilityTimeMs: 2200,
     distressTimeMs: 4800,
+    smallMovementWindowMs: 4000,
+    smallMovementBurstCount: 3,
     candidateTimeoutMs: 1900,
     recoveryTimeMs: 1200,
     normaliseTimeMs: 900

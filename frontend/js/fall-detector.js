@@ -41,6 +41,9 @@ export function createFallDetector(thresholds = CONFIG.THRESHOLDS) {
   let uprightElapsedMs = 0;
   let descentEvidenceMs = 0;
   let instabilityEvidenceMs = 0;
+  let elapsedMs = 0;
+  let smallMovementActive = false;
+  let smallMovementBursts = [];
 
   function transition(next) {
     if (next === state) return false;
@@ -52,6 +55,7 @@ export function createFallDetector(thresholds = CONFIG.THRESHOLDS) {
 
   function update(features, dtMs) {
     const dt = Math.max(0, Math.min(Number(dtMs) || 0, 120));
+    elapsedMs += dt;
     stateElapsedMs += dt;
 
     const downwardSpeed = Math.max(0, -(features.verticalVelocity || 0));
@@ -80,6 +84,24 @@ export function createFallDetector(thresholds = CONFIG.THRESHOLDS) {
     instabilityEvidenceMs = instabilitySample ? instabilityEvidenceMs + dt : 0;
     const rapidDescent = descentEvidenceMs >= thresholds.rapidDropConfirmationMs;
     const instability = instabilityEvidenceMs >= thresholds.instabilityConfirmationMs;
+
+    // Repeated small movements can add concern after a witnessed fall and
+    // immobility, but never by themselves. This avoids treating sleep,
+    // stretching, or an already-grounded person as an incident.
+    const postFallGroundState = state === FALL_STATES.GROUND
+      || state === FALL_STATES.IMMOBILE
+      || state === FALL_STATES.POSSIBLE_DISTRESS;
+    const smallMovement = grounded && !lowMotion && !recoveryMotion;
+    smallMovementBursts = smallMovementBursts.filter(
+      (time) => elapsedMs - time <= thresholds.smallMovementWindowMs
+    );
+    if (postFallGroundState && smallMovement && !smallMovementActive) {
+      smallMovementBursts.push(elapsedMs);
+    }
+    smallMovementActive = postFallGroundState && smallMovement;
+    if (!postFallGroundState || !grounded) smallMovementBursts = [];
+    const repeatedSmallMovements = smallMovementBursts.length
+      >= thresholds.smallMovementBurstCount;
 
     switch (state) {
       case FALL_STATES.NORMAL:
@@ -117,6 +139,7 @@ export function createFallDetector(thresholds = CONFIG.THRESHOLDS) {
 
       case FALL_STATES.IMMOBILE:
         if (!grounded && (upright || recoveryMotion)) transition(FALL_STATES.RECOVERY);
+        else if (repeatedSmallMovements) transition(FALL_STATES.POSSIBLE_DISTRESS);
         else if (grounded
           && (features.groundDurationMs || 0) >= thresholds.distressTimeMs
           && (features.timeSinceMovementMs || 0) >= thresholds.distressTimeMs) {
@@ -146,7 +169,9 @@ export function createFallDetector(thresholds = CONFIG.THRESHOLDS) {
       nearGround,
       grounded,
       lowMotion,
-      upright
+      upright,
+      smallMovementBurstCount: smallMovementBursts.length,
+      repeatedSmallMovements
     };
   }
 
@@ -156,6 +181,9 @@ export function createFallDetector(thresholds = CONFIG.THRESHOLDS) {
     uprightElapsedMs = 0;
     descentEvidenceMs = 0;
     instabilityEvidenceMs = 0;
+    elapsedMs = 0;
+    smallMovementActive = false;
+    smallMovementBursts = [];
   }
 
   return { update, reset, get state() { return state; } };

@@ -71,7 +71,8 @@ function updateFor(detector, durationMs, patch, stepMs = 100) {
 }
 
 // Already resting on the floor is not a detected fall without a preceding
-// descent. This can be exercise, stretching, or another ordinary activity.
+// descent, even with occasional sleep-like movement. This can be sleep,
+// exercise, stretching, or another ordinary activity.
 {
   const detector = createFallDetector();
   const incidentStates = new Set([
@@ -89,10 +90,45 @@ function updateFor(detector, durationMs, patch, stepMs = 100) {
       boundingBoxBottom: 0.97,
       groundDurationMs: elapsed,
       timeSinceMovementMs: elapsed,
-      motionMagnitude: 0.01
+      motionMagnitude: elapsed % 1200 === 0 ? 0.065 : 0.01
     }, 100);
     assert.equal(incidentStates.has(result.state), false);
   }
+}
+
+// After a witnessed fall and a period of immobility, repeated small movement
+// bursts are additional observable distress evidence. This describes motion;
+// it does not diagnose a seizure or any other medical condition.
+{
+  const detector = createFallDetector();
+  detector.update({ ...base, verticalVelocity: -0.72, descentDistance: 0.18, bodyAngle: 42 }, 100);
+  detector.update({ ...base, verticalVelocity: -0.72, descentDistance: 0.2, bodyAngle: 48 }, 100);
+  detector.update({ ...base, verticalVelocity: -0.68, descentDistance: 0.22, bodyAngle: 55 }, 100);
+
+  updateFor(detector, 700, (elapsed) => ({
+    bodyAngle: 76, boundingBoxRatio: 1.45, centerY: 0.72, boundingBoxBottom: 0.96,
+    groundDurationMs: elapsed, motionMagnitude: 0.01
+  }));
+  updateFor(detector, 2400, (elapsed) => ({
+    bodyAngle: 76, boundingBoxRatio: 1.45, centerY: 0.72, boundingBoxBottom: 0.96,
+    groundDurationMs: 700 + elapsed, timeSinceMovementMs: elapsed, motionMagnitude: 0.01
+  }));
+  assert.equal(detector.state, FALL_STATES.IMMOBILE);
+
+  for (let burst = 0; burst < 3; burst += 1) {
+    detector.update({
+      ...base, bodyAngle: 76, boundingBoxRatio: 1.45, centerY: 0.72,
+      boundingBoxBottom: 0.96, groundDurationMs: 3200,
+      motionMagnitude: 0.065
+    }, 100);
+    detector.update({
+      ...base, bodyAngle: 76, boundingBoxRatio: 1.45, centerY: 0.72,
+      boundingBoxBottom: 0.96, groundDurationMs: 3300,
+      motionMagnitude: 0.01
+    }, 100);
+  }
+
+  assert.equal(detector.state, FALL_STATES.POSSIBLE_DISTRESS);
 }
 
 // A fall/collapse-like example requires a temporal sequence and escalates only
