@@ -61,6 +61,15 @@ class PythonPerceptionTests(unittest.TestCase):
         self.assertEqual(smoothed.get_keypoint("nose").y, 3)
         self.assertEqual(smoothed.confidence, 0.9)
 
+    def test_pose_bounds_ignore_low_confidence_outlier(self):
+        keypoints = {
+            f"point_{index}": Keypoint(index, index + 1, 0, 0.9)
+            for index in range(6)
+        }
+        keypoints["occluded"] = Keypoint(999, 999, 0, 0.1)
+
+        self.assertEqual(PoseTracker._compute_bbox(keypoints), (0, 1, 5, 6))
+
     def test_continuous_alerts_accumulate_video_time(self):
         processor = RealtimeProcessor.__new__(RealtimeProcessor)
         processor.classifier = FakeClassifier()

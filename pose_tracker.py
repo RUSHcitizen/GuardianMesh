@@ -139,7 +139,6 @@ class PoseTracker:
             
             # Convert to Keypoint objects
             keypoints = {}
-            bbox_coords = []
             
             for name, index in self.LANDMARK_INDEXES.items():
                 lm = landmarks.landmark[index]
@@ -150,17 +149,9 @@ class PoseTracker:
                     confidence=lm.visibility
                 )
                 keypoints[name] = keypoint
-                bbox_coords.append([lm.x * w, lm.y * h])
             
-            if bbox_coords:
-                bbox_coords = np.array(bbox_coords)
-                bbox = (
-                    bbox_coords[:, 0].min(),
-                    bbox_coords[:, 1].min(),
-                    bbox_coords[:, 0].max(),
-                    bbox_coords[:, 1].max()
-                )
-                
+            if keypoints:
+                bbox = self._compute_bbox(keypoints)
                 core_names = ('left_shoulder', 'right_shoulder', 'left_hip', 'right_hip')
                 core_confidence = float(np.mean([
                     keypoints[name].confidence for name in core_names
@@ -187,6 +178,18 @@ class PoseTracker:
             self.pose_history[pose.person_id].append(pose)
 
         return result_poses
+
+    @staticmethod
+    def _compute_bbox(keypoints: Dict[str, Keypoint]) -> Tuple[float, float, float, float]:
+        """Build bounds from visible joints, falling back when too few are reliable."""
+        visible = [point for point in keypoints.values() if point.confidence >= 0.35]
+        points = visible if len(visible) >= 6 else list(keypoints.values())
+        return (
+            min(point.x for point in points),
+            min(point.y for point in points),
+            max(point.x for point in points),
+            max(point.y for point in points),
+        )
     
     def _associate_and_update_tracks(self, detections: List[Pose], frame_shape: Tuple[int, int]) -> List[int]:
         """
@@ -279,12 +282,10 @@ class PoseTracker:
                 confidence=point.confidence,
             )
 
-        xs = [point.x for point in keypoints.values()]
-        ys = [point.y for point in keypoints.values()]
         return Pose(
             keypoints=keypoints,
             confidence=current.confidence,
-            bbox=(min(xs), min(ys), max(xs), max(ys)),
+            bbox=self._compute_bbox(keypoints),
         )
     
     def _bbox_iou(self, bbox1: Tuple, bbox2: Tuple) -> float:
