@@ -101,6 +101,7 @@ class PoseTracker:
             lambda: deque(maxlen=30)  # Keep last 30 frames per person
         )
         self.person_age: Dict[int, int] = defaultdict(int)  # Frame count per person
+        self.track_missed: Dict[int, int] = defaultdict(int)  # Consecutive missed frames
         
     def process_frame(self, frame: np.ndarray) -> List[Pose]:
         """
@@ -157,6 +158,8 @@ class PoseTracker:
                 current_detections.append(pose)
         
         # Associate detections to tracked persons (Hungarian-like matching)
+        for person_id in self.tracked_poses:
+            self.track_missed[person_id] += 1
         self._associate_and_update_tracks(current_detections, frame.shape[:2])
         
         # Remove stale tracks
@@ -226,6 +229,7 @@ class PoseTracker:
                 self.tracked_poses[person_id] = detections[best_match_idx]
                 self.tracked_poses[person_id].person_id = person_id
                 self.person_age[person_id] += 1
+                self.track_missed[person_id] = 0
                 used_detections.add(best_match_idx)
         
         # New detections become new tracks
@@ -234,6 +238,7 @@ class PoseTracker:
                 detection.person_id = self.next_person_id
                 self.tracked_poses[self.next_person_id] = detection
                 self.person_age[self.next_person_id] = 1
+                self.track_missed[self.next_person_id] = 0
                 self.next_person_id += 1
     
     def _bbox_iou(self, bbox1: Tuple, bbox2: Tuple) -> float:
@@ -261,12 +266,13 @@ class PoseTracker:
     def _cleanup_old_tracks(self):
         """Remove tracks that haven't been seen in a while"""
         to_remove = [
-            pid for pid, age in self.person_age.items()
-            if age > self.max_person_tracking_age
+            pid for pid, missed in self.track_missed.items()
+            if missed > self.max_person_tracking_age
         ]
         for pid in to_remove:
             del self.tracked_poses[pid]
             del self.person_age[pid]
+            del self.track_missed[pid]
             if pid in self.pose_history:
                 del self.pose_history[pid]
     
@@ -282,5 +288,6 @@ class PoseTracker:
         self.tracked_poses.clear()
         self.pose_history.clear()
         self.person_age.clear()
+        self.track_missed.clear()
         self.next_person_id = 0
  

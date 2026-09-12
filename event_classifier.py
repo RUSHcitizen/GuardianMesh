@@ -358,7 +358,7 @@ class RealtimeProcessor:
     def __init__(
         self,
         camera_id: str = "cam_01",
-        alert_threshold: float = 0.65,
+        alert_threshold: float = 0.45,
         buffer_size: int = 3,  # frames to average scores
     ):
         self.classifier = EventClassifier(camera_id=camera_id)
