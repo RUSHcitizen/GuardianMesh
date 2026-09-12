@@ -32,7 +32,51 @@ import os
  
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
- 
+
+# ============================================================================
+# DISTRESS SCORING (shared by /api/events and /api/score)
+# ============================================================================
+
+def compute_score(
+    fall_score: float,
+    immobility_score: float,
+    tracking_confidence: float,
+    persistence_seconds: float = 0.0,
+) -> dict:
+    """
+    Derive distress state, confidence, and human-readable reason from
+    raw CV metrics. Same logic as python-engine/main.py's /score endpoint.
+    """
+    overall_confidence = round(
+        0.45 * fall_score + 0.35 * immobility_score + 0.20 * tracking_confidence,
+        3,
+    )
+
+    if (
+        fall_score >= 0.75
+        and immobility_score >= 0.70
+        and tracking_confidence >= 0.70
+        and persistence_seconds >= 5
+    ):
+        state = "DISTRESS_EVENT"
+        reason = "High fall signal with sustained immobility"
+    elif fall_score >= 0.75 and immobility_score >= 0.65:
+        state = "VERIFYING"
+        reason = "Possible fall with immobility under verification"
+    elif fall_score >= 0.75:
+        state = "POSSIBLE_FALL"
+        reason = "Fall signal detected"
+    else:
+        state = "NORMAL"
+        reason = "No significant distress pattern detected"
+
+    return {
+        "state": state,
+        "overall_confidence": overall_confidence,
+        "reason": reason,
+    }
+
+
 # ============================================================================
 # DATABASE SETUP
 # ============================================================================
@@ -61,7 +105,10 @@ class IncidentModel(Base):
     fall_score = Column(Float)
     immobility_score = Column(Float)
     tracking_confidence = Column(Float)
+    persistence_seconds = Column(Float, default=0.0)
     overall_confidence = Column(Float)
+    state = Column(String, index=True, nullable=True)
+    reason = Column(String, nullable=True)
     timestamp = Column(DateTime, index=True)
     acknowledged = Column(Boolean, default=False)
     acknowledged_at = Column(DateTime, nullable=True)
@@ -102,14 +149,17 @@ class EventInput(BaseModel):
         }
     )
     camera_id: str
-    event_type: str
     fall_score: float
     immobility_score: float
     tracking_confidence: float
-    overall_confidence: float
+    persistence_seconds: float = 0.0
     timestamp: str
     person_id: Optional[int] = None
-    
+    # Backward-compatible: older/existing CV clients may still send these.
+    # The backend recomputes both server-side rather than trusting the client.
+    event_type: Optional[str] = None
+    overall_confidence: Optional[float] = None
+
 class EventOutput(BaseModel):
     """Event for API response"""
     id: str
@@ -126,6 +176,14 @@ class EventOutput(BaseModel):
     model_config = ConfigDict(from_attributes=True)
  
  
+class ScoreRequest(BaseModel):
+    """Raw metrics for one-off scoring via /api/score"""
+    fall_score: float
+    immobility_score: float
+    tracking_confidence: float
+    persistence_seconds: float = 0.0
+
+
 class IncidentSummary(BaseModel):
     """Summary of recent incidents for a camera"""
     camera_id: str
@@ -339,63 +397,108 @@ async def ingest_event(event: EventInput, db: Session = Depends(get_db)):
     
     Called by `ai_cv.guardian_mesh_inference` for each detection.
     """
-    import uuid
-    
     # Generate incident ID
     incident_id = f"{event.camera_id}_{int(datetime.now(timezone.utc).timestamp()*1000)}"
-    
+
     # Parse timestamp
     try:
         event_dt = datetime.fromisoformat(event.timestamp.replace('Z', '+00:00'))
     except:
         event_dt = datetime.now(timezone.utc)
-    
+
+    # Derive state/confidence/reason from raw metrics rather than trusting
+    # whatever the client supplied for event_type/overall_confidence.
+    score = compute_score(
+        fall_score=event.fall_score,
+        immobility_score=event.immobility_score,
+        tracking_confidence=event.tracking_confidence,
+        persistence_seconds=event.persistence_seconds,
+    )
+    state = score["state"]
+    overall_confidence = score["overall_confidence"]
+    reason = score["reason"]
+    event_type = event.event_type or state.lower()
+
     # Store in database
     incident = IncidentModel(
         id=incident_id,
         camera_id=event.camera_id,
-        event_type=event.event_type,
+        event_type=event_type,
         fall_score=event.fall_score,
         immobility_score=event.immobility_score,
         tracking_confidence=event.tracking_confidence,
-        overall_confidence=event.overall_confidence,
+        persistence_seconds=event.persistence_seconds,
+        overall_confidence=overall_confidence,
+        state=state,
+        reason=reason,
         timestamp=event_dt,
         person_id=event.person_id
     )
     db.add(incident)
     db.commit()
-    
+
     logger.info(
-        f"Event: {event.event_type} | "
+        f"Event: {event_type} | State: {state} | "
         f"Fall: {event.fall_score:.2f} | "
         f"Immob: {event.immobility_score:.2f} | "
-        f"Conf: {event.overall_confidence:.2f}"
+        f"Conf: {overall_confidence:.2f}"
     )
-    
-    # Broadcast to connected clients
+
+    # Broadcast to connected clients (include backend-derived fields)
+    broadcast_payload = event.model_dump()
+    broadcast_payload.update({
+        "event_type": event_type,
+        "overall_confidence": overall_confidence,
+        "state": state,
+        "reason": reason,
+        "incident_id": incident_id,
+    })
     asyncio.create_task(
-        manager.broadcast_event(event.model_dump())
+        manager.broadcast_event(broadcast_payload)
     )
-    
-    # Trigger alerts for critical events
-    if event.fall_score > 0.75 and event.immobility_score > 0.80:
+
+    # Trigger alerts based on backend-derived state. Critical alerts are
+    # reserved strictly for confirmed DISTRESS_EVENT.
+    if state == "DISTRESS_EVENT":
         alert_msg = f"🚨 CRITICAL FALL DETECTED on {event.camera_id}"
         asyncio.create_task(
             manager.send_alert(event.camera_id, "critical", alert_msg)
         )
-    elif event.fall_score > 0.50:
-        alert_msg = f"⚠️ Possible fall on {event.camera_id}"
+    elif state == "VERIFYING":
+        alert_msg = f"⚠️ Possible fall under verification on {event.camera_id}"
         asyncio.create_task(
             manager.send_alert(event.camera_id, "high", alert_msg)
         )
-    
+    elif state == "POSSIBLE_FALL":
+        alert_msg = f"⚠️ Possible fall on {event.camera_id}"
+        asyncio.create_task(
+            manager.send_alert(event.camera_id, "medium", alert_msg)
+        )
+
     return {
         "status": "received",
         "incident_id": incident_id,
-        "event_type": event.event_type
+        "state": state,
+        "overall_confidence": overall_confidence,
+        "reason": reason,
     }
  
  
+@app.post("/api/score")
+async def score(req: ScoreRequest):
+    """
+    Compute distress state/confidence/reason from raw CV metrics without
+    storing an incident. Useful for testing the scoring logic directly.
+    Uses the exact same compute_score() function as /api/events.
+    """
+    return compute_score(
+        fall_score=req.fall_score,
+        immobility_score=req.immobility_score,
+        tracking_confidence=req.tracking_confidence,
+        persistence_seconds=req.persistence_seconds,
+    )
+
+
 @app.get("/api/cameras")
 async def list_cameras(db: Session = Depends(get_db)):
     """List all active cameras"""
