@@ -26,7 +26,10 @@ export function normalizeEvent(raw = {}) {
   const eventType = raw.eventType || raw.event_type || raw.type || 'normal';
   // The CV pipeline sends the command-center fields alongside its legacy
   // snake_case ones; fall back to the legacy pair if the rich fields are absent.
-  const confidence = raw.confidence ?? raw.overall_confidence;
+  // overall_confidence is recomputed by the backend and outranks the value the
+  // CV client supplied for itself
+  const confidence = raw.overall_confidence ?? raw.confidence;
+  const state = raw.state || null;
   const guardianScore = raw.guardianScore ?? raw.guardian_score
     ?? (raw.fall_score !== undefined
       ? clamp01(raw.fall_score) * 7 + clamp01(raw.immobility_score) * 3
@@ -43,16 +46,37 @@ export function normalizeEvent(raw = {}) {
     cameraId: raw.cameraId || raw.camera_id || null,
     location: raw.location || '',
     eventType,
-    label: raw.label || EVENT_LABELS[eventType] || eventType,
+    label: LABEL_FOR_STATE[state] || raw.label || EVENT_LABELS[eventType] || eventType,
     confidence: clamp01(confidence),
     guardianScore: Number(guardianScore) || 0,
-    status: raw.status || 'observing',
+    state,
+    reason: raw.reason || null,
+    status: STATUS_FOR_STATE[state] || raw.status || 'observing',
     durationMs: Number(raw.durationMs ?? raw.duration_ms ?? 0),
     boundingBox: raw.boundingBox || raw.bounding_box || null,
     keypoints: raw.keypoints || [],
     temporalFeatures: raw.temporalFeatures || raw.temporal_features || null
   };
 }
+
+/**
+ * The backend derives a distress state server-side (compute_score) rather than
+ * trusting the client, so when `state` is present it outranks the classifier's
+ * own status. Ordered by severity.
+ */
+const STATUS_FOR_STATE = {
+  NORMAL: 'normal',
+  POSSIBLE_FALL: 'observing',
+  VERIFYING: 'warning',
+  DISTRESS_EVENT: 'critical'
+};
+
+const LABEL_FOR_STATE = {
+  NORMAL: 'Normal motion',
+  POSSIBLE_FALL: 'Possible fall',
+  VERIFYING: 'Possible fall — verifying',
+  DISTRESS_EVENT: 'Possible distress pattern'
+};
 
 const RESPONSE_FOR_STATUS = {
   normal: 'Monitoring',
@@ -209,7 +233,10 @@ export function createDataSource({ engine }) {
     const key = keyOf(event);
     let situation = situations.get(key);
 
-    if (event.eventType === 'normal') {
+    // `status` already reflects the backend's own distress state where it sent
+    // one, so a detection the scorer rates as normal opens no incident — even
+    // if the CV classifier labelled that frame a possible fall.
+    if (event.status === 'normal' || event.eventType === 'normal') {
       if (!situation) return null;
       // the situation returned to baseline: close it out once
       situations.delete(key);
@@ -294,6 +321,8 @@ export function createDataSource({ engine }) {
         || Math.abs((camera.score ?? 0) - event.guardianScore) >= 0.1) {
         setCameraStatus(event.cameraId, { status: event.status, score: event.guardianScore });
       }
+      // the hero panel should name the camera that is actually reporting
+      if (state.activeCamera !== event.cameraId) update({ activeCamera: event.cameraId });
     }
 
     // 3. incident + timeline — one situation per tracked person per camera
@@ -339,6 +368,7 @@ export function createDataSource({ engine }) {
       confidence: event.confidence,
       guardianScore: event.guardianScore,
       status: event.status,
+      reason: event.reason,
       durationSeconds: Math.round((Date.now() - situation.startedAt) / 1000),
       immobilitySeconds,
       responseState: RESPONSE_FOR_STATUS[event.status] || 'Monitoring',
@@ -351,10 +381,14 @@ export function createDataSource({ engine }) {
       situation.label = event.label;
       addTimelineEvent({
         kind: TIMELINE_KIND_FOR_STATUS[event.status] || 'observation',
-        title: `${event.label} — ${event.trackingId || 'unknown track'} on ${event.cameraId || 'unknown camera'}.`,
+        title: event.reason
+          ? `${event.label} — ${event.reason.charAt(0).toLowerCase()}${event.reason.slice(1)} `
+            + `(${event.trackingId || 'unknown track'} on ${event.cameraId || 'unknown camera'}).`
+          : `${event.label} — ${event.trackingId || 'unknown track'} on ${event.cameraId || 'unknown camera'}.`,
         facts: [
           { label: 'Confidence', value: `${Math.round(event.confidence * 100)}%` },
           { label: 'Score', value: Number(event.guardianScore).toFixed(1) },
+          ...(event.state ? [{ label: 'State', value: event.state.replace(/_/g, ' ') }] : []),
           ...(immobilitySeconds ? [{ label: 'Immobility', value: `${immobilitySeconds} s` }] : [])
         ]
       });

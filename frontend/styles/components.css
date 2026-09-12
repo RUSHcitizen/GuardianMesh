@@ -783,3 +783,9 @@
   .rec-item { padding: 1px 0; }
 }
 
+
+.incident__reason {
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+  color: var(--text-secondary);
+}

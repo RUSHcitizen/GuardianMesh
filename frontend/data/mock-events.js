@@ -80,7 +80,7 @@ export const RECOMMENDATIONS = {
   ],
   critical: [
     'Alert designated responder',
-    'Display incident location — School Gym, Camera 03 sightline',
+    'Display incident location — {location}',
     'Continue monitoring person P-02',
     'Open live incident view for responder review',
     'Provide on-site emergency-resource information'

@@ -295,6 +295,15 @@ timeline records transitions rather than a per-frame log. The same pass guards
 every state write, so a 30 fps stream does not re-render the dashboard 30 times
 a second.
 
+### Backend-derived state
+
+The backend computes `state`, `overall_confidence` and `reason` server-side
+rather than trusting the client, so `normalizeEvent` lets those outrank the
+classifier's own `status`, `confidence` and `label`. The correlator keys off the
+resulting status, which means a detection the backend scores `NORMAL` opens no
+incident even when the CV classifier called that frame a possible fall — the two
+can legitimately disagree, and the backend is downstream and authoritative.
+
 ### live-director.js
 
 Demo Mode scripts when the stage turns critical and when responders activate. A

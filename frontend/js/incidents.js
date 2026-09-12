@@ -69,6 +69,7 @@ export function createIncidentFeed() {
         el('span', { class: 'incident__id', text: incident.id })
       ]),
       el('h3', { class: 'incident__label', text: incident.label }),
+      incident.reason ? el('p', { class: 'incident__reason', text: incident.reason }) : null,
       el('div', { class: 'incident__where' }, [
         el('span', {}, ['Track ', el('b', { text: incident.trackingId })]),
         el('span', {}, ['Camera ', el('b', { text: incident.cameraId })]),

@@ -79,10 +79,12 @@ export function createLiveDirector({ camera }) {
       return;
     }
 
-    setResponseState(
-      stage,
-      stage === 'notified' ? RECOMMENDATIONS.critical : RECOMMENDATIONS.elevated
-    );
+    const lead = state.incidents.find((i) => i.status !== 'resolved');
+    const where = lead
+      ? [lead.location, lead.cameraId].filter(Boolean).join(', ')
+      : 'incident camera';
+    const list = stage === 'notified' ? RECOMMENDATIONS.critical : RECOMMENDATIONS.elevated;
+    setResponseState(stage, list.map((line) => line.replace('{location}', where)));
     const engaged = new Set(DISPATCH[stage] || []);
     for (const r of RESPONDERS) {
       setResponderState(r.id, engaged.has(r.id) ? stage : 'idle');

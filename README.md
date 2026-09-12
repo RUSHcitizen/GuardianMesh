@@ -249,6 +249,23 @@ No file edits are needed to switch. `window.guardian.connect('<token>')` does th
 same thing from the console, and `CONFIG.BACKEND_ENABLED: true` in
 `frontend/js/config.js` makes live the default.
 
+**Backend-derived scoring**
+
+The backend recomputes `state`, `overall_confidence` and `reason` from the raw CV
+metrics rather than trusting the client (`compute_score`). The frontend treats
+those as authoritative:
+
+| Backend `state` | Dashboard status |
+|---|---|
+| `NORMAL` | no incident opened — even if the CV labelled that frame a possible fall |
+| `POSSIBLE_FALL` | observing |
+| `VERIFYING` | warning |
+| `DISTRESS_EVENT` | critical |
+
+The backend's `reason` ("High fall signal with sustained immobility") is shown on
+the incident card and woven into the timeline entry, so the dashboard explains
+its escalation in the backend's own words.
+
 **What the frontend does with the stream**
 
 - The backend wraps each detection as `{ type: "event", data: {…} }`; the adapter

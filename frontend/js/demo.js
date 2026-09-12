@@ -25,6 +25,10 @@ import {
 } from './state.js';
 import { clockLabel } from './util.js';
 
+/** Fill the shared recommendation placeholder with this demo's location. */
+const withLocation = (list, location) =>
+  list.map((line) => line.replace('{location}', location));
+
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
 /** Reset mesh, responders and people to the baseline "all clear" posture. */
@@ -174,7 +178,7 @@ export function createDemo(ctx) {
           immobilitySeconds: 0,
           responseState: 'Monitoring — no responder dispatched'
         });
-        setResponseState('received', RECOMMENDATIONS.elevated);
+        setResponseState('received', withLocation(RECOMMENDATIONS.elevated, 'Main Corridor'));
         addTimelineEvent({
           kind: 'warning',
           title: 'Ground-level pose detected — person has reached floor level.',
@@ -316,7 +320,7 @@ export function createDemo(ctx) {
       at: 19000,
       name: 'Critical — response activated',
       run() {
-        setResponseState('notified', RECOMMENDATIONS.critical);
+        setResponseState('notified', withLocation(RECOMMENDATIONS.critical, 'School Gym, Camera 03 sightline'));
         setResponderState('RSP-SEC', 'notified');
         setResponderState('RSP-AID', 'notified');
         setResponderState('RSP-DES', 'notified');
