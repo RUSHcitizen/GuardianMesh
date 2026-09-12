@@ -84,7 +84,8 @@ export function createPoseEngine() {
         boundingBoxBottom: 0,
         descentDistance: 0,
         aspectRatioChange: 0,
-        groundSignal: false
+        groundSignal: false,
+        smallMovementBurstCount: 0
       },
       _prev: null,
       _history: [],
@@ -259,6 +260,7 @@ export function createPoseEngine() {
     advanceDurations(track, dtMs);
     if (track.assessmentSource !== 'local') return;
     const assessment = track._fallDetector.update(track.features, dtMs);
+    track.features.smallMovementBurstCount = assessment.smallMovementBurstCount;
     track.fallState = assessment.state;
     const presentation = presentationForFallState(assessment.state, track.poseConfidence);
     track.status = presentation.status;

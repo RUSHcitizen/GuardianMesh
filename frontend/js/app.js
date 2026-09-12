@@ -215,11 +215,15 @@ function handleFallTransition(person, previous, score) {
     });
     return;
   }
+  const distressExplanation = person.features.smallMovementBurstCount
+    >= CONFIG.THRESHOLDS.smallMovementBurstCount
+    ? 'Possible distress — repeated small movements after post-fall immobility.'
+    : 'Possible collapse / distress — sustained immobility after a fall.';
   const entries = {
     RAPID_DESCENT: ['warning', 'Rapid downward movement detected.'],
     GROUND: ['warning', 'Possible fall detected — person reached a horizontal ground-level posture.'],
     IMMOBILE: ['inference', 'Person remains on ground with low movement.'],
-    POSSIBLE_DISTRESS: ['critical', 'Possible collapse / distress — sustained immobility after a fall.'],
+    POSSIBLE_DISTRESS: ['critical', distressExplanation],
     RECOVERY: ['resolved', 'Recovery movement detected — person is rising from the ground.']
   };
   const entry = entries[person.fallState];
