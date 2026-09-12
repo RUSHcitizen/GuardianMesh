@@ -75,22 +75,24 @@ dependencies — so deploying it is just serving `frontend/`.
 `wrangler.toml` declares the output directory in-repo, but **the root directory
 is a project setting and has to be set once in the dashboard.**
 
-**Why it matters.** With the root directory left at the repository root,
-Cloudflare's build image auto-detects `requirements.txt` and runs
-`pip install -r requirements.txt` — pulling opencv, mediapipe and torch to
-publish a static page. That build fails:
+**Why `requirements.txt` is not in the repository root.** Cloudflare's build
+image installs any dependency manifest it finds in the build root, so a root
+`requirements.txt` made every deploy of a *static page* try to install the CV/ML
+stack (opencv, mediapipe, torch) — and fail:
 
 ```
 ERROR: Could not find a version that satisfies the requirement mediapipe==0.10.8
        (from versions: 0.10.30, ... 1.0.1)
 ```
 
+Moving it to `requirements/requirements.txt` removes the trigger entirely, so the
+build installs nothing and finishes in seconds. Nothing else changed: the file's
+contents are identical, only the path moved.
+
 **Do not fix this by raising the mediapipe pin.** `0.10.8` is the last release
 that still exposes the `mp.solutions` API `ai_cv/pose_tracker.py` is built on —
 verified: `0.10.30` and `1.0.1` both drop it and crash the tracker at startup.
 Raising the pin would trade a visible build failure for a silent runtime one.
-Point the build at `frontend/` instead, or set the build variable
-`SKIP_DEPENDENCY_INSTALL=1`.
 
 **What gets deployed.** Demo Mode, which makes no network requests at all — so
 the published page is fully self-contained. `?live` only works where the
@@ -198,7 +200,7 @@ window.guardian.connect()            // retry the backend connection
 Use Python 3.9+:
 
 ```powershell
-python3.9 -m pip install -r requirements.txt
+python3.9 -m pip install -r requirements/requirements.txt
 ```
 
 On Windows, if the complete install tries to compile `greenlet`, install the server wheels separately:

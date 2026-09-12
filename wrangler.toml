@@ -4,14 +4,12 @@
 # no build step and no dependencies. Nothing in this repository needs to be
 # compiled or installed to serve it.
 #
-# IMPORTANT: also set the Pages project's *Root directory* to `frontend` (or set
-# the build variable SKIP_DEPENDENCY_INSTALL=1). Cloudflare's build image
-# auto-detects the root requirements.txt and runs `pip install -r
-# requirements.txt`, which pulls the CV/ML stack (opencv, mediapipe, torch) for
-# a static site. That install has no business running here, and it fails: the
-# pinned mediapipe==0.10.8 has no wheel for the build image's Python, and every
-# newer release removes the `mp.solutions` API that ai_cv/pose_tracker.py uses,
-# so the pin cannot simply be raised.
+# Python requirements deliberately live in requirements/ rather than the
+# repository root: Cloudflare installs any dependency manifest it finds in the
+# build root, which made every deploy of this static page try to install the
+# CV/ML stack (opencv, mediapipe, torch) and fail. The pin cannot simply be
+# raised — every mediapipe release after 0.10.8 removes the `mp.solutions` API
+# that ai_cv/pose_tracker.py uses.
 
 name = "guardianmesh"
 pages_build_output_dir = "frontend"

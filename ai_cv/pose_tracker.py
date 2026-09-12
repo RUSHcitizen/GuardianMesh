@@ -76,7 +76,7 @@ class PoseTracker:
         if mp is None:
             raise RuntimeError(
                 "MediaPipe is required for camera inference. "
-                "Install dependencies with: pip install -r requirements.txt"
+                "Install dependencies with: pip install -r requirements/requirements.txt"
             )
 
         self.min_detection_confidence = min_detection_confidence
