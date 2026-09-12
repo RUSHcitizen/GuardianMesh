@@ -38,6 +38,23 @@ to reach the quality and reliability the project required. The unsuccessful
 model was still valuable—it taught us where our training approach worked, where
 it failed, and why rigorous evaluation matters as much as training itself.
 
+## Computer vision model
+
+GuardianMesh's default live-camera path uses Google's **MediaPipe Pose
+Landmarker Lite** model (`pose_landmarker_lite.task`, float16) through the pinned
+MediaPipe Tasks Vision `1.0.1` browser runtime. It can track up to four people
+and returns 33 anonymous body landmarks for each detected pose. GuardianMesh
+then applies its own explainable temporal logic to those landmarks: downward
+movement, torso angle, ground-level posture, immobility, recovery, and repeated
+small post-fall movements.
+
+The optional Python camera pipeline uses the classic **MediaPipe Pose 0.10.8**
+API and is effectively single-person. Neither camera path uses Qwen or Claude
+for live video analysis. Qwen2.5-Coder-14B and Claude Opus 5 were part of the
+software-development process; no generative AI model watches the camera feed.
+Frames remain local, and the system does not perform facial recognition,
+identity matching, or medical diagnosis.
+
 ---
 
 # Frontend — command center
