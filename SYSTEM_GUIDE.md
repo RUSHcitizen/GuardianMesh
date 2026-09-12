@@ -424,8 +424,12 @@ URL through OpenCV. OpenCV BGR frames are converted to RGB before inference.
 
 `ai_cv/pose_tracker.py` uses the classic `mp.solutions.pose` API from MediaPipe
 `0.10.8`, model complexity 1 by default, and MediaPipe's internal landmark
-smoothing. It builds pixel-coordinate keypoints, a box, a minimum-landmark pose
-confidence, and a temporary numeric `person_id`.
+smoothing. It reads each selected joint by its explicit MediaPipe index (for
+example shoulders `11/12`, hips `23/24`, and ankles `27/28`), builds
+pixel-coordinate keypoints and a box, and assigns a temporary numeric
+`person_id`. Pose confidence is the mean confidence of the shoulders and hips,
+so a briefly hidden wrist or ankle does not discard an otherwise reliable
+torso observation.
 
 The code performs centroid/IoU track association and removes a track after 30
 missed frames by default. However, the classic MediaPipe Pose API used here
@@ -433,9 +437,12 @@ returns one pose per frame. Despite older “multi-person” comments, this Pyth
 path is effectively single-person unless its detector is replaced. The browser
 Pose Landmarker path is the current multi-pose implementation.
 
-The Python `KEYPOINT_NAMES` list is also a legacy project mapping applied by
-array position; it is not the explicit MediaPipe index mapping used by the
-browser. For the most trustworthy current demo, use the browser path.
+After a detection is associated with an existing track, GuardianMesh applies
+exponential smoothing to matched keypoints. `smoothing_alpha` controls how much
+of the current observation is used; its default `0.7` keeps 70% of the new point
+and 30% of the previous point. The bounding box is recomputed from the smoothed
+points. For the most trustworthy current demo, use the browser path, which is
+the default and supports multiple people.
 
 ### 8.2 Python temporal features
 
