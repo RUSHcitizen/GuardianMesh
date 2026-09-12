@@ -57,6 +57,27 @@ software-development process; no generative AI model watches the camera feed.
 Frames remain local, and the system does not perform facial recognition,
 identity matching, or medical diagnosis.
 
+| Where | Model | Settings | Code |
+|---|---|---|---|
+| Browser (default) | MediaPipe Pose Landmarker Lite | float16, up to 4 people, 33 landmarks | `frontend/js/browser-pose.js`, `frontend/js/config.js` |
+| Python pipeline (optional) | MediaPipe Pose (`mp.solutions.pose`) | `model_complexity=1` (full model), one person | `ai_cv/pose_tracker.py` |
+
+MediaPipe is the only computer vision model. Everything after pose estimation
+is rule-based, with hand-set thresholds rather than a trained classifier:
+
+- **Browser:** `frontend/js/fall-detector.js` is a temporal state machine
+  (instability, rapid descent, ground, immobility, possible distress, recovery)
+  tuned in `CONFIG.THRESHOLDS`.
+- **Python:** `ai_cv/temporal_features.py` and `ai_cv/event_classifier.py`
+  combine weighted motion, posture and immobility signals.
+- **Backend:** `compute_score` in `backend/backend_server.py` maps fall,
+  immobility and tracking scores to `NORMAL`, `POSSIBLE_FALL`, `VERIFYING` or
+  `DISTRESS_EVENT` with fixed thresholds.
+
+PyTorch and torchvision are listed as optional in `requirements/requirements.txt`
+but are not imported anywhere; scikit-learn is used only by
+`ai_cv/evaluate_pipeline.py` to compute accuracy metrics on labelled videos.
+
 ---
 
 # Frontend — command center
