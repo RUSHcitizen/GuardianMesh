@@ -509,9 +509,13 @@ Its signal-consistency confidence is `1 - variance(signals)/0.25`, clipped to
    present; otherwise `NORMAL`.
 
 `RealtimeProcessor` averages each person's last five fall scores and emits an
-alert only when the smoothed value exceeds the configured threshold. The main
-pipeline's CLI default is 0.50. It sends one below-threshold follow-up when an
-alerting person returns to normal so the dashboard can resolve the incident.
+alert only when the smoothed value exceeds the configured threshold. It also
+counts consecutive alert frames and converts them to `persistence_seconds`
+using the input video's measured frame rate. A below-threshold or missing-person
+frame clears that person's persistence and smoothing history. The main
+pipeline's CLI default threshold is 0.50. It sends one below-threshold follow-up
+when an alerting person returns to normal so the dashboard can resolve the
+incident.
 
 The Python dashboard payload normalizes coordinates and maps severity to a
 0-10 score as:
@@ -551,11 +555,10 @@ Then:
 The frontend maps these server states to normal, observing, warning, and
 critical respectively. Server state outranks a client-provided label.
 
-Current limitation: the Python `to_dashboard_dict()` does not include
-`persistence_seconds`, so FastAPI receives its default `0.0`. Consequently the
-Python-to-FastAPI stream can reach `VERIFYING` but cannot reach
-`DISTRESS_EVENT` unless a client is updated to send persistence. The browser's
-local state machine does not have this limitation.
+The Python `to_dashboard_dict()` includes the measured
+`persistence_seconds`, so a continuously qualifying Python event can reach the
+backend's five-second `DISTRESS_EVENT` gate. Interruption or loss of the tracked
+person resets the timer; separate sightings are not added together.
 
 ### Storage and streaming
 
