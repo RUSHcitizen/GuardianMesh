@@ -13,10 +13,12 @@ import { clamp, clockLabel, round } from './util.js';
 export const guardianState = {
   // system
   systemStatus: 'online',          // online | degraded | offline
-  backendStatus: 'connecting',     // connected | reconnecting | disconnected
-  dataSource: 'demo',              // demo | live
-  aiEngine: 'active',              // active | unavailable
-  latencyMs: 42,
+  backendStatus: 'not_required',   // connected | reconnecting | disconnected | not_required
+  dataSource: 'local',             // local | live | demo(dev only)
+  aiEngine: 'loading',             // loading | ready | error
+  cameraStatus: 'off',             // off | starting | live | denied | error
+  modelError: '',
+  latencyMs: 0,
   privacyMode: 'anonymous',
 
   // assessment

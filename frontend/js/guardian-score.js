@@ -21,29 +21,50 @@ export function bandFor(score) {
  *
  * @param {{verticalVelocity:number, motionMagnitude:number, bodyAngle:number,
  *          groundDurationMs:number, timeSinceMovementMs:number}} f
+ * @param {string} fallState state from the temporal fall detector
  * @returns {number} 0..10
  */
-export function computeGuardianScore(f) {
+export function computeGuardianScore(f, fallState = 'NORMAL') {
   const T = CONFIG.THRESHOLDS;
   let score = 0.8; // baseline presence of a tracked person
 
   // abrupt downward travel
   const drop = Math.max(0, -(f.verticalVelocity || 0));
-  score += clamp(drop / T.rapidDropVelocity, 0, 1) * 2.0;
+  score += clamp(drop / T.rapidDropVelocity, 0, 1) * 1.8;
+
+  // displacement across the configured temporal window is more robust than a
+  // single noisy velocity sample
+  score += clamp((f.descentDistance || 0) / T.rapidDropDistance, 0, 1) * 1.2;
 
   // abnormal body orientation
-  score += clamp((Math.abs(f.bodyAngle || 0) - T.bodyAngleAnomaly) / (90 - T.bodyAngleAnomaly), 0, 1) * 1.6;
+  score += clamp((Math.abs(f.bodyAngle || 0) - T.instabilityAngle)
+    / (90 - T.instabilityAngle), 0, 1) * 1.4;
 
   // time spent at ground level
-  score += clamp((f.groundDurationMs || 0) / 12000, 0, 1) * 2.2;
+  score += clamp((f.groundDurationMs || 0) / T.distressTimeMs, 0, 1) * 1.8;
 
   // sustained minimal movement, weighted by how long the person has been at
   // ground level — standing still is not the same signal as lying still
-  const groundFactor = clamp((f.groundDurationMs || 0) / 2000, 0, 1);
-  score += clamp((f.timeSinceMovementMs || 0) / 16000, 0, 1) * 2.8 * groundFactor;
+  const groundFactor = clamp((f.groundDurationMs || 0) / T.immobilityTimeMs, 0, 1);
+  score += clamp((f.timeSinceMovementMs || 0) / T.distressTimeMs, 0, 1) * 2.3 * groundFactor;
 
   // active movement pulls concern back down
-  score -= clamp((f.motionMagnitude || 0) / 0.25, 0, 1) * 1.4;
+  if (fallState === 'NORMAL' || fallState === 'RECOVERY') {
+    score -= clamp((f.motionMagnitude || 0) / 0.25, 0, 1) * 1.1;
+  }
+
+  // State floors keep a real fall from appearing to recover merely because
+  // the rapid-descent signal naturally ends after the person reaches ground.
+  const floor = {
+    NORMAL: 0,
+    INSTABILITY: 2.6,
+    RAPID_DESCENT: 4.4,
+    GROUND: 5.5,
+    IMMOBILE: 7.0,
+    POSSIBLE_DISTRESS: 8.6,
+    RECOVERY: 3.0
+  }[fallState] ?? 0;
+  score = Math.max(score, floor);
 
   return clamp(round(score, 1), 0, 10);
 }

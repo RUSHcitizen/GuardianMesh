@@ -1,32 +1,21 @@
 /**
  * GuardianMesh — AR pose overlay.
  *
- * Draws anonymous tracking graphics on a canvas above the camera stage:
- * bounding box, skeleton, tracking label, confidence, Guardian Score and a
- * motion vector. All input coordinates are NORMALISED (0..1) and converted to
+ * Draws anonymous yellow person-detection boxes above the real camera feed.
+ * Pose landmarks remain internal and are deliberately not rendered. All input
+ * coordinates are NORMALISED (0..1) and converted to
  * canvas pixels against the displayed media rect, so the overlay stays
  * registered when the stage resizes or the video letterboxes.
  */
 
-import { SKELETON_EDGES } from '../data/pose-library.js';
-import { clamp, lerp } from './util.js';
+import { clamp } from './util.js';
 
-const STATUS_COLORS = {
-  normal:    [85, 200, 236],
-  tracking:  [85, 200, 236],
-  safe:      [68, 209, 159],
-  observing: [245, 185, 66],
-  elevated:  [245, 185, 66],
-  warning:   [245, 185, 66],
-  critical:  [237, 86, 86]
-};
+const DETECTION_YELLOW = [255, 216, 64];
 
 const rgba = ([r, g, b], a) => `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},${a})`;
 
 export function createPoseOverlay(canvas) {
   const ctx = canvas.getContext('2d');
-  /** eased colour per track so status changes read as a transition, not a jump */
-  const colorState = new Map();
   let width = 0;
   let height = 0;
 
@@ -64,11 +53,8 @@ export function createPoseOverlay(canvas) {
   const toY = (ny) => contentRect.y + ny * contentRect.height;
 
   function colorFor(person) {
-    const target = STATUS_COLORS[person.status] || STATUS_COLORS.normal;
-    const current = colorState.get(person.trackingId) || target.slice();
-    const next = current.map((c, i) => lerp(c, target[i], 0.12));
-    colorState.set(person.trackingId, next);
-    return next;
+    void person;
+    return DETECTION_YELLOW;
   }
 
   /* -- primitives --------------------------------------------------------- */
@@ -86,12 +72,12 @@ export function createPoseOverlay(canvas) {
     const corner = Math.min(16, w * 0.32, h * 0.18);
 
     ctx.save();
-    ctx.strokeStyle = rgba(color, 0.38);
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = rgba(color, 0.95);
+    ctx.lineWidth = 2;
     ctx.strokeRect(x, y, w, h);
 
     ctx.strokeStyle = rgba(color, 0.95);
-    ctx.lineWidth = 1.8;
+    ctx.lineWidth = 3;
     ctx.beginPath();
     // four corner brackets — thin and professional, never a heavy frame
     ctx.moveTo(x, y + corner); ctx.lineTo(x, y); ctx.lineTo(x + corner, y);
@@ -101,34 +87,6 @@ export function createPoseOverlay(canvas) {
     ctx.stroke();
     ctx.restore();
     return { x, y, w, h };
-  }
-
-  function drawPose(keypoints, color) {
-    if (!keypoints || !keypoints.length) return;
-    const byName = Object.fromEntries(keypoints.map((k) => [k.name, k]));
-
-    ctx.save();
-    ctx.strokeStyle = rgba(color, 0.55);
-    ctx.lineWidth = 1.4;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    for (const [a, b] of SKELETON_EDGES) {
-      const pa = byName[a];
-      const pb = byName[b];
-      if (!pa || !pb) continue;
-      ctx.moveTo(toX(pa.x), toY(pa.y));
-      ctx.lineTo(toX(pb.x), toY(pb.y));
-    }
-    ctx.stroke();
-
-    ctx.fillStyle = rgba(color, 0.92);
-    for (const k of keypoints) {
-      const r = (k.confidence ?? 1) > 0.5 ? 2 : 1.4;
-      ctx.beginPath();
-      ctx.arc(toX(k.x), toY(k.y), r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
   }
 
   function drawTrackingLabel(person, color, box) {
@@ -187,36 +145,6 @@ export function createPoseOverlay(canvas) {
     ctx.restore();
   }
 
-  /** Short arrow showing direction + magnitude of recent movement. */
-  function drawMotionVector(person, color) {
-    const f = person.features || {};
-    const magnitude = Math.min(Math.abs(f.verticalVelocity || 0) * 0.09, 0.14);
-    if (magnitude < 0.012) return;
-    const kp = Object.fromEntries(person.keypoints.map((k) => [k.name, k]));
-    if (!kp.left_hip || !kp.right_hip) return;
-
-    const ox = toX((kp.left_hip.x + kp.right_hip.x) / 2);
-    const oy = toY((kp.left_hip.y + kp.right_hip.y) / 2);
-    const dir = (f.verticalVelocity || 0) < 0 ? 1 : -1; // downward travel points down
-    const len = magnitude * contentRect.height;
-
-    ctx.save();
-    ctx.strokeStyle = rgba(color, 0.85);
-    ctx.fillStyle = rgba(color, 0.85);
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.moveTo(ox, oy);
-    ctx.lineTo(ox, oy + len * dir);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(ox, oy + (len + 6) * dir);
-    ctx.lineTo(ox - 4, oy + len * dir);
-    ctx.lineTo(ox + 4, oy + len * dir);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  }
-
   function roundRect(c, x, y, w, h, r) {
     c.beginPath();
     c.moveTo(x + r, y);
@@ -234,14 +162,12 @@ export function createPoseOverlay(canvas) {
       if (!person.boundingBox) continue;
       const color = colorFor(person);
       const box = drawBoundingBox(person, color);
-      drawPose(person.keypoints, color);
-      drawMotionVector(person, color);
       drawTrackingLabel(person, color, box);
     }
   }
 
-  function forget(trackingId) { colorState.delete(trackingId); }
-  function reset() { colorState.clear(); clearPoseOverlay(); }
+  function forget(trackingId) { void trackingId; }
+  function reset() { clearPoseOverlay(); }
 
   resize();
   return { render, resize, setContentSource, clearPoseOverlay, reset, forget };

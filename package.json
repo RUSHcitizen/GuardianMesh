@@ -5,7 +5,8 @@
   "description": "GuardianMesh — privacy-first AI emergency awareness network (frontend command center)",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test": "node --no-warnings tests/fall-detector.test.mjs"
   },
   "dependencies": {}
 }

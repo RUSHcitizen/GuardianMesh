@@ -17,7 +17,8 @@ The system processes camera frames locally. It sends event metadata only; it doe
 # Frontend — command center
 
 Plain **HTML5 + CSS3 + vanilla JavaScript (ES modules)**. No framework, no build
-step, no runtime dependencies. Architecture write-up: **[ARCHITECTURE.md](ARCHITECTURE.md)**.
+step or installed frontend dependencies. The page fetches a pinned MediaPipe
+Tasks runtime and pose model. Architecture write-up: **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
 ## Run the frontend
 
@@ -42,22 +43,21 @@ cd frontend && python3 -m http.server 8080     # → http://localhost:8080
 Targets 1920×1080 and 1440×900; degrades to two columns under 1400px and a single
 column under 1080px.
 
-## Demo Mode
+## Live camera demo
 
 | Action | How |
 |---|---|
-| Start / restart | **START DEMO** button, or press <kbd>D</kbd> |
-| Advance one step | **NEXT STEP** button, or press <kbd>N</kbd> |
+| Start / stop | **START LIVE CAMERA** button, or press <kbd>D</kbd> |
 | Reset everything | **RESET** button, or press <kbd>R</kbd> |
 
-Demo Mode is deterministic and **requires no backend**. It runs a full ~35 s
-incident: normal motion → rapid vertical displacement → orientation change →
-ground-level pose → low motion → prolonged immobility → rising confidence and
-Guardian Score → critical distress pattern → incident → mesh corroboration →
-simulated response → movement resumed → resolved.
+The default path requests the actual device camera and runs MediaPipe Pose
+Landmarker locally in the browser. Frames stay on the device. Anonymous
+landmarks feed temporal fall detection, Guardian Score, timeline, incidents,
+and the existing response workflow. A backend is not required.
 
-RESET cancels the sequence, clears incidents/timeline/corroboration, resets the
-score, restores every camera and responder node, and returns the stage to normal.
+Camera/model failures stay visible and never fall back to fake people. The old
+scripted story is test-only at `/?dev=simulation`; that flag is never enabled by
+the main hackathon page.
 
 ## Deploying the dashboard (Cloudflare)
 
@@ -102,10 +102,11 @@ that still exposes the `mp.solutions` API `ai_cv/pose_tracker.py` is built on �
 verified: `0.10.30` and `1.0.1` both drop it and crash the tracker at startup.
 Raising the pin would trade a visible build failure for a silent runtime one.
 
-**What gets deployed.** Demo Mode, which makes no network requests at all — so
-the published page is fully self-contained. `?live` only works where the browser
-can reach the backend; on an HTTPS deployment an `http://` backend is blocked as
-mixed content, and the dashboard says so in the console instead of hanging.
+**What gets deployed.** The browser downloads the pinned MediaPipe Tasks runtime
+and pose model, then performs inference locally. The FastAPI backend is not part
+of this static Worker, so the header accurately says **Backend: Not required**.
+`?live` remains available only when a separately deployed HTTPS/WSS backend is
+configured; an HTTPS page cannot connect to `http://127.0.0.1:8000`.
 
 ## Project layout
 
@@ -124,9 +125,11 @@ frontend/
 │   ├── config.js            endpoints, thresholds, score bands, video source
 │   ├── util.js              DOM/math helpers
 │   ├── camera.js            camera stage: simulated / webcam / video file, error states
+│   ├── browser-pose.js       MediaPipe Pose Landmarker + anonymous multi-person tracking
+│   ├── fall-detector.js      temporal fall state machine
 │   ├── scene.js             simulated CCTV scene renderer (canvas)
 │   ├── pose-engine.js       pose interpolation + temporal feature derivation
-│   ├── pose-overlay.js      AR overlay: bounding boxes, skeletons, labels, motion vectors
+│   ├── pose-overlay.js      yellow anonymous person-detection boxes
 │   ├── guardian-score.js    Guardian Score panel + live severity model
 │   ├── timeline.js          AI reasoning timeline
 │   ├── incidents.js         incident feed + filters
@@ -145,17 +148,16 @@ frontend/
 
 ## Camera / video integration
 
-Lives in **`js/camera.js`**. Three sources, selectable from the buttons on the
-stage, with automatic fallback:
+Lives in **`js/camera.js`** and **`js/browser-pose.js`**:
 
-1. **Simulated** (default) — `js/scene.js` draws a deterministic corridor scene
-   from the same keypoints the overlay uses, so the demo never depends on
-   hardware or media files.
-2. **Webcam** — `getUserMedia`; permission denial or a missing device shows a
-   professional "Camera offline" state and falls back to simulated.
-3. **Video file** — pick a file at runtime, or set
+1. **Webcam** (default demo) — `getUserMedia` frames go directly to MediaPipe.
+   Permission/model failures remain visible and do not trigger simulation.
+2. **Video test** — pick a local recording to test the same real inference path,
+   or set
    `CONFIG.VIDEO_SOURCE_URL = 'assets/video/corridor.mp4'` in `js/config.js` to
    load footage on boot.
+3. **DEV simulation** — available only at `/?dev=simulation` for deterministic
+   automated/UI development.
 
 The overlay is source-agnostic: `overlay.setContentSource(videoEl)` computes the
 displayed media rect (including `object-fit: cover` letterboxing) so normalised
@@ -292,7 +294,8 @@ Then open **<http://localhost:8080/?live>**.
 
 | URL | Data source |
 |---|---|
-| `http://localhost:8080/` | Demo Mode — makes no network requests at all |
+| `http://localhost:8080/` | Real local MediaPipe model + live device camera |
+| `http://localhost:8080/?dev=simulation` | Explicit scripted DEV fixture |
 | `http://localhost:8080/?live` | Attaches the live backend |
 | `http://localhost:8080/?live&token=…` | Attaches a token-protected backend |
 

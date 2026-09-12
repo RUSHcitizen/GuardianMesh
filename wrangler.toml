@@ -1,8 +1,9 @@
 # Cloudflare configuration for the GuardianMesh command center.
 #
 # The deployable artifact is frontend/ — static HTML, CSS and ES modules, with
-# no build step and no dependencies. Nothing here needs compiling or installing
-# to serve it, so this is an assets-only Worker: no `main`, just static files.
+# no build step or installed frontend dependencies. The browser fetches the
+# pinned MediaPipe runtime/model, so this is an assets-only Worker: no `main`,
+# just static files.
 #
 # This is deliberately a Workers Static Assets config rather than a Pages one.
 # The deploy command configured for this project is `npx wrangler deploy`, which

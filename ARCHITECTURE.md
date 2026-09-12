@@ -3,8 +3,8 @@
 How the command-center frontend is put together, and where to plug things in.
 For how to run it and the JSON contracts, see [README.md](README.md).
 
-Stack: HTML5, CSS3, vanilla JavaScript (ES modules). No framework, no build
-step, no runtime dependencies.
+Stack: HTML5, CSS3, vanilla JavaScript (ES modules). No framework or build
+step. The browser fetches the pinned MediaPipe Tasks runtime and pose model.
 
 ---
 
@@ -12,10 +12,10 @@ step, no runtime dependencies.
 
 ```
 ┌─ PERCEPTION ─────────────────────────────────────────────────┐
-│  camera.js ── scene.js        (simulated feed)               │
-│           └── pose-overlay.js (AR tracking graphics)         │
-│  pose-engine.js → tracks, pose interpolation, temporal       │
-│                   feature derivation                          │
+│  camera.js ── browser-pose.js (MediaPipe Pose Landmarker)    │
+│           └── pose-overlay.js (yellow detection boxes)       │
+│  pose-engine.js → tracks + temporal feature derivation       │
+│  fall-detector.js → per-person temporal state machine        │
 └──────────────────────────┬───────────────────────────────────┘
                            │ person records (normalised 0..1)
 ┌─ REASONING / STATE ──────▼───────────────────────────────────┐
@@ -28,24 +28,25 @@ step, no runtime dependencies.
 └──────────────────────────────────────────────────────────────┘
 
 ┌─ PRODUCERS ──────────────────────────────────────────────────┐
-│  demo.js (scripted)      datasource.js ← websocket.js (live) │
+│  app.js (local CV)  datasource.js ← websocket.js (backend)   │
+│  demo.js (explicit DEV simulation only)                      │
 └──────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 2. The central idea: two producers, one vocabulary
+## 2. The central idea: producers share one vocabulary
 
 ```
-Demo Mode  ─┐
-            ├──► state.js actions ──► subscribers ──► renderers
-WebSocket  ─┘    setGuardianScore, setConfidence, addTimelineEvent,
+Local CV ───┐
+DEV demo ───┼──► state.js actions ──► subscribers ──► renderers
+WebSocket ──┘    setGuardianScore, setConfidence, addTimelineEvent,
                  upsertIncident, setCameraStatus, setResponseState, …
 ```
 
-Both producers write through the **same action functions**. No UI code branches
-on where data came from, so Demo Mode exercises the real path rather than a
-parallel mock — if the dashboard works in Demo Mode, it works on live data.
+All producers write through the **same action functions**. No panel renderer
+branches on where data came from. The default producer is local browser CV;
+the scripted producer is reachable only through `?dev=simulation`.
 
 Two structural rules enforce this, and both are visible in the import graph:
 
@@ -59,9 +60,10 @@ Two structural rules enforce this, and both are visible in the import graph:
 ### Module graph
 
 ```
-app.js ─┬─ camera.js ─┬─ scene.js ──────── data/pose-library.js
-        │             └─ pose-overlay.js ─ data/pose-library.js
-        ├─ pose-engine.js ───────────────── data/pose-library.js
+app.js ─┬─ camera.js ───────── pose-overlay.js
+        ├─ browser-pose.js ─── MediaPipe Tasks (remote, pinned)
+        ├─ pose-engine.js ─┬── data/pose-library.js
+        │                  └── fall-detector.js
         ├─ demo.js ──────────────────────── data/mock-events.js
         ├─ datasource.js ─┬─ websocket.js
         │                 └─ data/mock-events.js
@@ -119,16 +121,17 @@ Adding a new producer means calling these — never touching a renderer.
 
 ---
 
-## 4. One animation loop, and a deliberate bypass
+## 4. One application animation loop
 
-`app.js` owns a single `requestAnimationFrame`. **Nothing else in the codebase
-owns a timer**, which is why RESET is reliable: there is nothing to leak.
+`app.js` owns the application `requestAnimationFrame`; MediaPipe inference,
+feature derivation, overlay rendering, and panel animation all run from it.
 
 ```js
 frame(now):
-  demo.tick(now)             // fire any steps whose `at` has elapsed
-  people = engine.update(dt) // advance poses, derive temporal features
-  camera.render(people, now) // simulated scene (if active) + AR overlay
+  landmarks = pose.detect(video, now) // interval-gated MediaPipe inference
+  engine.applyExternalTrack(landmarks)
+  people = engine.update(dt) // derive features + advance fall state machines
+  camera.render(people, now) // real media + yellow detection boxes
   panels.score.tick(dt)      // ease the gauge toward its target
   renderFeatures(people)     // → writes DOM directly (see below)
   syncState(people, now)     // → throttled to 240 ms
@@ -149,36 +152,28 @@ and the panel eases the displayed number toward it each frame.
 ## 5. Perception pipeline
 
 ```
-body state   →  pose interpolation  →  placement      →  feature derivation
-walking          lerp between           anchor +          verticalVelocity
-standing         canonical poses;       scale about       motionMagnitude
-stumble          cycles loop            the feet          bodyAngle
-falling                                                   groundDurationMs
-ground / still                                            timeSinceMovementMs
-recovering
-seated
+camera frame → MediaPipe landmarks → anonymous track match → temporal features
+             → fall state machine → Guardian Score / timeline / incidents
 ```
 
 ### The coordinate contract
 
 Everything crossing a module boundary is **normalised 0..1, origin top-left**.
 
-That one contract is why the simulated scene and the AR overlay stay
-pixel-registered — they read the same keypoints — and it is the same contract
-the CV service fills. `pose-overlay` converts to pixels against a `contentRect`
+That one contract is why the media and AR overlay stay pixel-registered.
+`pose-overlay` converts to pixels against a `contentRect`
 it derives from the live media, including `object-fit: cover` letterboxing, so
 registration survives resize and source swaps.
 
-`engine.applyExternalTrack()` is the seam where real CV output replaces the
-simulation. Feature derivation runs identically on top of either, so the UI
-cannot tell the difference.
+`engine.applyExternalTrack()` is the seam where local MediaPipe or an external
+CV producer enters the existing engine.
 
 ### Camera sources
 
-`camera.js` resolves, in priority order: an explicit runtime choice (webcam or
-picked file) → `CONFIG.VIDEO_SOURCE_URL` → the deterministic simulated scene.
-Every failure path (permission denied, no device, undecodable file) shows a
-stage state and falls back, so the demo never depends on hardware.
+`camera.js` starts off, then accepts an explicit webcam or picked-video choice.
+Failures (permission denied, no device, undecodable file) remain visible and do
+not silently create simulated people. Simulation is available only through the
+explicit development query flag.
 
 ---
 
@@ -214,10 +209,10 @@ backend / websocket → datasource.js → normalised event → state actions →
 - `websocket.js` is pure transport with a bounded backoff ladder that
   terminates and reports `DISCONNECTED` rather than retrying forever.
 
-`CONFIG.BACKEND_ENABLED` is `false` by default: the frontend then makes **no
-network requests at all**. A probe against a static server answers 404, and the
-browser logs that 404 itself — no JavaScript can suppress it. Attach a backend
-with `window.guardian.connect()` or by flipping the flag.
+`CONFIG.BACKEND_ENABLED` is `false` by default, so the local browser inference
+path marks the backend **Not required**. The pinned MediaPipe runtime and model
+are the only default network fetches. Attach a separately deployed HTTPS/WSS
+backend with `window.guardian.connect()` or by flipping the flag.
 
 ---
 
@@ -322,7 +317,8 @@ Cameras the frontend has never heard of join the mesh on their first event.
 
 | URL | Source |
 |---|---|
-| `/` | Demo Mode — no network requests at all |
+| `/` | Real local MediaPipe model + live device camera |
+| `/?dev=simulation` | Explicit scripted development fixture |
 | `/?live` | Attach the live backend |
 | `/?live&token=…` | Attach a token-protected backend |
 

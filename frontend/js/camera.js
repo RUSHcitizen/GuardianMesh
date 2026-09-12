@@ -4,10 +4,8 @@
  * Owns the three stacked layers of the hero panel:
  *   scene canvas  (simulated feed)  →  <video> (webcam / file)  →  overlay canvas
  *
- * Source priority: an explicit file/webcam choice, then CONFIG.VIDEO_SOURCE_URL,
- * then the deterministic simulated scene. The overlay is source-agnostic — it
- * always draws the current tracks, so swapping the feed never touches the
- * tracking code.
+ * Live camera errors remain visible and never fall back to simulation. The
+ * deterministic scene is reachable only through the explicit DEV flag.
  */
 
 import { CONFIG } from './config.js';
@@ -15,7 +13,7 @@ import { createScene } from './scene.js';
 import { createPoseOverlay } from './pose-overlay.js';
 import { $, show } from './util.js';
 
-export function createCamera(refs) {
+export function createCamera(refs, { allowSimulation = false } = {}) {
   const { stage, video, sceneCanvas, overlayCanvas } = refs;
   const scene = createScene(sceneCanvas);
   const overlay = createPoseOverlay(overlayCanvas);
@@ -25,13 +23,15 @@ export function createCamera(refs) {
   const stateHint = $('#stage-state-hint');
   const feedState = $('#hud-feed-state');
 
-  let mode = 'simulated'; // simulated | webcam | file
+  let mode = 'off'; // off | simulated(dev only) | webcam | file
+  let cameraStatus = 'off';
+  let lastError = '';
   let stream = null;
   let fileUrl = null;
   const listeners = new Set();
 
   function emit() {
-    for (const fn of listeners) fn({ mode });
+    for (const fn of listeners) fn({ mode, status: cameraStatus, error: lastError });
   }
   function onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 
@@ -65,27 +65,59 @@ export function createCamera(refs) {
     }
   }
 
+  function useOff() {
+    stopStream();
+    video.pause();
+    video.removeAttribute('src');
+    video.srcObject = null;
+    video.hidden = true;
+    sceneCanvas.hidden = true;
+    mode = 'off';
+    cameraStatus = 'off';
+    lastError = '';
+    overlay.reset();
+    overlay.setContentSource(null);
+    showStageState('Camera off', 'Press Start Live Camera to begin local pose detection.');
+    setFeedLabel('Camera off', 'offline');
+    emit();
+  }
+
   function useSimulated() {
+    if (!allowSimulation) {
+      console.warn('[guardian] simulated feed is disabled outside /?dev=simulation.');
+      return false;
+    }
     stopStream();
     video.removeAttribute('src');
     video.srcObject = null;
     video.hidden = true;
     sceneCanvas.hidden = false;
     mode = 'simulated';
+    cameraStatus = 'live';
+    lastError = '';
     overlay.setContentSource(null);
     hideStageState();
     setFeedLabel('Simulated feed', 'active');
     emit();
+    return true;
   }
 
   async function useWebcam() {
     if (!navigator.mediaDevices?.getUserMedia) {
-      showStageState('Camera unavailable', 'This browser did not expose a capture device. Simulated feed retained.');
-      window.setTimeout(hideStageState, 3200);
+      mode = 'off';
+      cameraStatus = 'error';
+      lastError = 'Camera capture is unavailable in this browser.';
+      showStageState('Camera unavailable', lastError);
+      setFeedLabel('Camera error', 'offline');
+      emit();
       return false;
     }
     try {
+      cameraStatus = 'starting';
+      lastError = '';
       showStageState('Waiting for camera', 'Requesting capture permission…');
+      setFeedLabel('Requesting camera', 'observing');
+      emit();
       const next = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false
@@ -97,15 +129,26 @@ export function createCamera(refs) {
       sceneCanvas.hidden = true;
       mode = 'webcam';
       await video.play().catch(() => {});
+      cameraStatus = 'live';
+      lastError = '';
       overlay.setContentSource(video);
       hideStageState();
       setFeedLabel('Webcam live', 'active');
       emit();
       return true;
     } catch (err) {
-      console.warn('[guardian] webcam unavailable:', err?.name || err);
-      showStageState('Camera offline', 'Capture permission denied or no device present. Simulated feed retained.');
-      window.setTimeout(() => { hideStageState(); useSimulated(); }, 2600);
+      console.error('[guardian] webcam unavailable:', err);
+      stopStream();
+      video.hidden = true;
+      sceneCanvas.hidden = true;
+      mode = 'off';
+      cameraStatus = err?.name === 'NotAllowedError' ? 'denied' : 'error';
+      lastError = cameraStatus === 'denied'
+        ? 'Camera permission was denied. Allow camera access in the browser and try again.'
+        : 'No usable camera was found. Check the device and try again.';
+      showStageState(cameraStatus === 'denied' ? 'Camera permission denied' : 'Camera error', lastError);
+      setFeedLabel(cameraStatus === 'denied' ? 'Permission denied' : 'Camera error', 'offline');
+      emit();
       return false;
     }
   }
@@ -118,22 +161,34 @@ export function createCamera(refs) {
     video.hidden = false;
     sceneCanvas.hidden = true;
     mode = 'file';
+    cameraStatus = 'starting';
+    lastError = '';
     video.play().catch(() => {});
-    video.addEventListener('loadedmetadata', () => overlay.setContentSource(video), { once: true });
+    video.addEventListener('loadedmetadata', () => {
+      overlay.setContentSource(video);
+      cameraStatus = 'live';
+      hideStageState();
+      setFeedLabel(label, 'active');
+      emit();
+    }, { once: true });
     video.onerror = () => {
-      console.warn('[guardian] video source failed, returning to simulated feed');
-      showStageState('Feed unavailable', 'The video source could not be decoded. Simulated feed retained.');
-      window.setTimeout(() => { hideStageState(); useSimulated(); }, 2400);
+      console.error('[guardian] selected video source could not be decoded.');
+      cameraStatus = 'error';
+      lastError = 'The selected video could not be decoded.';
+      showStageState('Feed unavailable', lastError);
+      setFeedLabel('Video error', 'offline');
+      emit();
     };
-    hideStageState();
-    setFeedLabel(label, 'active');
+    showStageState('Loading video', 'Preparing the selected video for local pose detection…');
+    setFeedLabel('Loading video', 'observing');
     emit();
   }
 
   function useFile(file) {
     if (!file) return;
-    fileUrl = URL.createObjectURL(file);
-    useVideoUrl(fileUrl, 'Recorded feed');
+    const url = URL.createObjectURL(file);
+    useVideoUrl(url, 'Recorded feed');
+    fileUrl = url;
   }
 
   /* -- stage status / rendering -------------------------------------------- */
@@ -179,13 +234,15 @@ export function createCamera(refs) {
   }
 
   if (CONFIG.VIDEO_SOURCE_URL) useVideoUrl(CONFIG.VIDEO_SOURCE_URL, 'Recorded feed');
-  else useSimulated();
+  else useOff();
 
   return {
-    useSimulated, useWebcam, useFile, useVideoUrl,
+    useOff, useSimulated, useWebcam, useFile, useVideoUrl,
     setStatus, pulseCritical, render, resize, onChange,
     showStageState, hideStageState,
     overlay,
-    get mode() { return mode; }
+    get mode() { return mode; },
+    get status() { return cameraStatus; },
+    get video() { return video; }
   };
 }

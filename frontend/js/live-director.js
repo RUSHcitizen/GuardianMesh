@@ -54,7 +54,7 @@ export function createLiveDirector({ camera }) {
   }
 
   function apply(state) {
-    if (state.dataSource !== 'live') return;
+    if (state.dataSource !== 'live' && state.dataSource !== 'local') return;
 
     const stageStatus = stageStatusFor(state);
     if (stageStatus !== lastStageStatus) {

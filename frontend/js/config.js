@@ -5,13 +5,32 @@
 
 export const CONFIG = {
   /**
+   * The hackathon path is real browser-side inference. Scripted people remain
+   * available only at /?dev=simulation so a projector can never silently show
+   * synthetic detections after a camera or model failure.
+   */
+  DEV_SIMULATION_QUERY: 'simulation',
+
+  /** Pinned MediaPipe Tasks runtime + model for reproducible deployments. */
+  POSE_MODEL: {
+    runtimeUrl: 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/vision_bundle.mjs',
+    wasmRoot: 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm',
+    modelUrl: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
+    maxPoses: 4,
+    inferenceIntervalMs: 80,
+    minPoseDetectionConfidence: 0.5,
+    minPosePresenceConfidence: 0.5,
+    minTrackingConfidence: 0.5,
+    minLandmarkVisibility: 0.35,
+    trackMatchDistance: 0.28,
+    trackExpireMs: 1800
+  },
+  /**
    * Flip to true once a backend is actually running.
    *
-   * While this is false the frontend makes NO network requests at all: it runs
-   * entirely on demo data. That is deliberate. A reachability probe against a
-   * plain static server answers 404, and the browser logs that 404 to the
-   * console itself — no JavaScript can suppress it — which is noise nobody
-   * wants on a projector during a demo.
+   * While this is false the frontend makes no backend requests. Local pose
+   * inference still fetches the pinned MediaPipe runtime and model. Avoiding a
+   * reachability probe also keeps expected 404 noise out of the demo console.
    *
    * You do not have to edit this file to test a live backend: run
    * window.guardian.connect() in the console and it connects immediately.
@@ -47,7 +66,7 @@ export const CONFIG = {
    */
   ACCESS_TOKEN: null,
 
-  /** How long to wait for backend/WS before declaring the demo the data source. */
+  /** How long to wait for backend/WS before returning to local inference. */
   CONNECT_TIMEOUT_MS: 2500,
 
   /** Reconnect backoff ladder (ms). The UI never blocks on these. Once the
@@ -65,7 +84,7 @@ export const CONFIG = {
   /**
    * Optional pre-recorded footage for the camera stage.
    * Drop a file in frontend/assets/video/ and set e.g. 'assets/video/corridor.mp4'.
-   * When null, the deterministic simulated scene is used instead.
+   * When null, the camera remains off until the user chooses a source.
    */
   VIDEO_SOURCE_URL: null,
 
@@ -77,12 +96,29 @@ export const CONFIG = {
     { min: 0.0, key: 'normal', label: 'Low' }
   ],
 
-  /** Feature thresholds used by the live scoring engine (js/guardian-score.js). */
+  /**
+   * Live fall detector tuning. Coordinates are normalised to the video frame,
+   * velocities are normalised units/second, and angles are degrees away from
+   * vertical. Keep all hackathon tuning here rather than scattering numbers.
+   */
   THRESHOLDS: {
-    groundLevelY: 0.72,        // normalised hip Y below which a pose reads as ground-level
-    immobileMotion: 0.035,     // motion magnitude under which movement counts as minimal
-    rapidDropVelocity: 0.55,   // normalised units/sec of downward hip travel
-    bodyAngleAnomaly: 45       // degrees from vertical
+    minPoseConfidence: 0.45,
+    instabilityAngle: 28,
+    rapidDropVelocity: 0.34,
+    rapidDropDistance: 0.13,
+    descentWindowMs: 750,
+    torsoHorizontalAngle: 52,
+    groundCenterY: 0.56,
+    groundBottomY: 0.82,
+    horizontalBoxRatio: 0.9,
+    immobileMotion: 0.045,
+    recoveryMotion: 0.09,
+    groundConfirmationMs: 450,
+    immobilityTimeMs: 1600,
+    distressTimeMs: 3500,
+    candidateTimeoutMs: 1900,
+    recoveryTimeMs: 1200,
+    normaliseTimeMs: 900
   },
 
   /** Maximum timeline entries kept in memory/DOM. */

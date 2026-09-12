@@ -110,7 +110,7 @@ export function createDataSource({ engine }) {
     const becameLive = status === 'connected' && !live;
     update({
       backendStatus: status,
-      dataSource: status === 'connected' ? 'live' : 'demo'
+      dataSource: status === 'connected' ? 'live' : 'local'
     });
     live = status === 'connected';
     if (becameLive) goLive();
@@ -410,7 +410,7 @@ export function createDataSource({ engine }) {
       // Stay fully offline: no fetch, no socket, nothing for the browser to log.
       console.info('[guardian] running on demo data (CONFIG.BACKEND_ENABLED is false). '
         + 'Run window.guardian.connect() to attach a live backend.');
-      setBackendStatus('disconnected');
+      update({ backendStatus: 'not_required', dataSource: 'local' });
       return;
     }
 
