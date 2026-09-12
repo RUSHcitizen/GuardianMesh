@@ -79,8 +79,10 @@ export function createFallDetector(thresholds = CONFIG.THRESHOLDS) {
 
     uprightElapsedMs = upright ? uprightElapsedMs + dt : 0;
     descentEvidenceMs = descentSample ? descentEvidenceMs + dt : 0;
+    // Posture alone is ambiguous: a person may already be sleeping, exercising,
+    // or resting on the floor. Instability requires observed downward travel.
     const instabilitySample = (features.bodyAngle || 0) >= thresholds.instabilityAngle
-      && (descentDistance >= thresholds.instabilityMinDescent || nearGround);
+      && descentDistance >= thresholds.instabilityMinDescent;
     instabilityEvidenceMs = instabilitySample ? instabilityEvidenceMs + dt : 0;
     const rapidDescent = descentEvidenceMs >= thresholds.rapidDropConfirmationMs;
     const instability = instabilityEvidenceMs >= thresholds.instabilityConfirmationMs;

@@ -94,6 +94,7 @@ function updateFor(detector, durationMs, patch, stepMs = 100) {
     }, 100);
     assert.equal(incidentStates.has(result.state), false);
   }
+  assert.equal(detector.state, FALL_STATES.NORMAL);
 }
 
 // After a witnessed fall and a period of immobility, repeated small movement
