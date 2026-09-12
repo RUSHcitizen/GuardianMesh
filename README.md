@@ -1,5 +1,8 @@
 # GuardianMesh
 
+Privacy-preserving AI for recognizing human distress.
+Detect the emergency. Not the identity.
+
 Privacy-first early warning for observable distress patterns in physical spaces.
 This repository is split by team ownership:
 
