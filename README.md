@@ -28,15 +28,17 @@ the person.
 
 ## Model training and development
 
-We initially tried to reduce development costs by training and iterating on our
-own **Qwen2.5-Coder-14B**-based model. Training was a serious part of the
-experiment: we repeatedly evaluated its output against the reliability and
-software-engineering demands of GuardianMesh. Although the cost-cutting approach
-was promising, the trained model was not consistently capable enough for this
-software. We therefore moved the software-development work to **Claude Opus 5**
-to reach the quality and reliability the project required. The unsuccessful
-model was still valuable—it taught us where our training approach worked, where
-it failed, and why rigorous evaluation matters as much as training itself.
+We initially tried to reduce development costs by training, iterating on, and
+using our own **Qwen2.5-Coder-Pi-14B** model for part of the coding. Training
+was a serious part of the experiment: we repeatedly evaluated its output
+against the reliability and software-engineering demands of GuardianMesh. The
+model helped with some development work, but its code quality and reliability
+were not good enough to complete the entire system. Hardware restrictions also
+prevented us from upgrading to a larger local model. We therefore moved the
+remaining software-development work to **Claude Opus 5** to reach the quality
+the project required. The experiment was still valuable—it taught us where our
+training approach worked, where it failed, and why rigorous evaluation matters
+as much as training itself.
 
 ## Computer vision model
 
@@ -50,7 +52,7 @@ small post-fall movements.
 
 The optional Python camera pipeline uses the classic **MediaPipe Pose 0.10.8**
 API and is effectively single-person. Neither camera path uses Qwen or Claude
-for live video analysis. Qwen2.5-Coder-14B and Claude Opus 5 were part of the
+for live video analysis. Qwen2.5-Coder-Pi-14B and Claude Opus 5 were part of the
 software-development process; no generative AI model watches the camera feed.
 Frames remain local, and the system does not perform facial recognition,
 identity matching, or medical diagnosis.
