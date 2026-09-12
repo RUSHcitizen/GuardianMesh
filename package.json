@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node --no-warnings tests/fall-detector.test.mjs"
+    "test": "npm run test:browser && npm run test:python",
+    "test:browser": "node --no-warnings tests/fall-detector.test.mjs",
+    "test:python": "python3 -m unittest discover -s tests -p 'test_python_*.py' -v"
   },
   "dependencies": {}
 }
