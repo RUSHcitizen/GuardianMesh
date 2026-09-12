@@ -12,6 +12,28 @@ This repository is split by team ownership:
 
 The system processes camera frames locally. It sends event metadata only; it does not send or store raw frames by default. GuardianMesh is not a medical diagnosis system and every alert requires human verification.
 
+## Why we built GuardianMesh
+
+GuardianMesh began with our grandparents. We worry about them all the time:
+whether they might fall, become distressed, or need help when nobody is close
+enough to notice. Thinking about that problem helped us brainstorm a system that
+could recognize observable warning signs early while still respecting their
+privacy. That concern is why we built GuardianMesh—to help families know when
+someone may need a human check-in without identifying, recording, or diagnosing
+the person.
+
+## Model training and development
+
+We initially tried to reduce development costs by training and iterating on our
+own **Qwen2.5-Coder-14B**-based model. Training was a serious part of the
+experiment: we repeatedly evaluated its output against the reliability and
+software-engineering demands of GuardianMesh. Although the cost-cutting approach
+was promising, the trained model was not consistently capable enough for this
+software. We therefore moved the software-development work to **Claude Opus 5**
+to reach the quality and reliability the project required. The unsuccessful
+model was still valuable—it taught us where our training approach worked, where
+it failed, and why rigorous evaluation matters as much as training itself.
+
 ---
 
 # Frontend — command center
