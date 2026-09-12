@@ -111,6 +111,9 @@ Demo Mode  ─┐
 WebSocket  ─┘        (one vocabulary, one shared state object)
 ```
 
+Full write-up — layer stack, module graph, render loop, coordinate contract,
+CSS cascade rules and extension points — in **[ARCHITECTURE.md](ARCHITECTURE.md)**.
+
 Both producers write through the **same action functions** (`setGuardianScore`,
 `setConfidence`, `addTimelineEvent`, `upsertIncident`, `setCameraStatus`,
 `setResponseState`, …), so no UI code branches on where data came from.
