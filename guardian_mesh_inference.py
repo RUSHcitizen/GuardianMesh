@@ -104,6 +104,7 @@ class GuardianMeshPipeline:
         
         # Get video properties
         fps = cap.get(cv2.CAP_PROP_FPS) or self.fps_target
+        self.processor.frames_per_second = max(float(fps), 1.0)
         w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))

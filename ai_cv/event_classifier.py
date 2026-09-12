@@ -47,6 +47,7 @@ class EventDetection:
     overall_confidence: float  # 0-1 (event detection confidence)
     timestamp: str  # ISO 8601
     person_id: Optional[int] = None
+    persistence_seconds: float = 0.0
     
     # Additional signals for debugging/tuning
     body_angle: Optional[float] = None
@@ -66,6 +67,7 @@ class EventDetection:
             'overall_confidence': round(self.overall_confidence, 2),
             'timestamp': self.timestamp,
             'person_id': self.person_id,
+            'persistence_seconds': round(self.persistence_seconds, 2),
         }
     
     def to_json(self) -> str:
@@ -360,13 +362,16 @@ class RealtimeProcessor:
         camera_id: str = "cam_01",
         alert_threshold: float = 0.65,
         buffer_size: int = 5,  # frames to average scores
+        frames_per_second: float = 30.0,
     ):
         self.classifier = EventClassifier(camera_id=camera_id)
         self.alert_threshold = alert_threshold
         self.buffer_size = buffer_size
+        self.frames_per_second = max(float(frames_per_second), 1.0)
         
         # Smoothing buffer per person
         self.score_buffer: Dict[int, List[float]] = {}
+        self.alert_frame_counts: Dict[int, int] = {}
         # Every detection from the latest frame, including ones below the alert threshold
         self.last_detections: List[EventDetection] = []
     
@@ -379,9 +384,11 @@ class RealtimeProcessor:
 
         # Filter and smooth
         alerts = []
+        seen_person_ids = set()
         for det in detections:
             # person 0 is a real ID; only a missing ID maps to -1
             person_id = det.person_id if det.person_id is not None else -1
+            seen_person_ids.add(person_id)
             
             if person_id not in self.score_buffer:
                 self.score_buffer[person_id] = []
@@ -395,8 +402,15 @@ class RealtimeProcessor:
             
             # Alert if above threshold
             if smoothed_fall_score > self.alert_threshold:
+                self.alert_frame_counts[person_id] = self.alert_frame_counts.get(person_id, 0) + 1
                 det.fall_score = smoothed_fall_score
+                det.persistence_seconds = self.alert_frame_counts[person_id] / self.frames_per_second
                 alerts.append(det)
+            else:
+                self.alert_frame_counts.pop(person_id, None)
+
+        for person_id in set(self.alert_frame_counts) - seen_person_ids:
+            self.alert_frame_counts.pop(person_id, None)
         
         return alerts
     
@@ -405,6 +419,7 @@ class RealtimeProcessor:
         if self.classifier.pose_tracker is not None:
             self.classifier.pose_tracker.reset()
         self.score_buffer.clear()
+        self.alert_frame_counts.clear()
         self.last_detections = []
  
  
