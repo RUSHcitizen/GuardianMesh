@@ -411,6 +411,9 @@ class RealtimeProcessor:
 
         for person_id in set(self.alert_frame_counts) - seen_person_ids:
             self.alert_frame_counts.pop(person_id, None)
+
+        for person_id in set(self.score_buffer) - seen_person_ids:
+            self.score_buffer.pop(person_id, None)
         
         return alerts
     

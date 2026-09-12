@@ -96,6 +96,23 @@ class PythonPerceptionTests(unittest.TestCase):
 
         self.assertEqual(alert.persistence_seconds, 0.1)
 
+    def test_missing_person_clears_smoothing_history(self):
+        processor = RealtimeProcessor.__new__(RealtimeProcessor)
+        processor.classifier = FakeClassifier()
+        processor.alert_threshold = 0.5
+        processor.buffer_size = 5
+        processor.frames_per_second = 10.0
+        processor.score_buffer = {}
+        processor.alert_frame_counts = {}
+        processor.last_detections = []
+
+        processor.process_frame(None)
+        self.assertIn(0, processor.score_buffer)
+
+        processor.classifier.process_frame = lambda _frame: []
+        processor.process_frame(None)
+        self.assertNotIn(0, processor.score_buffer)
+
 
 if __name__ == "__main__":
     unittest.main()
