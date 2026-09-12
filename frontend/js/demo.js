@@ -21,7 +21,7 @@ import {
   addTimelineEvent, clearIncidents, clearTimeline, guardianState, setAssessment,
   setConfidence, setCorroboration, setGuardianScore, setHandoff, setResponders,
   setResponderState, setResponseState, setCameraStatus, setSensorStatus,
-  setTrackedPeople, update, upsertIncident
+  update, upsertIncident
 } from './state.js';
 import { clockLabel } from './util.js';
 
