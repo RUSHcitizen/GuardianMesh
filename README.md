@@ -12,6 +12,10 @@ This repository is split by team ownership:
 
 The system processes camera frames locally. It sends event metadata only; it does not send or store raw frames by default. GuardianMesh is not a medical diagnosis system and every alert requires human verification.
 
+For the complete camera-to-dashboard explanation, formulas, thresholds, data
+flows, deployment model, limitations, and test procedures, read
+**[SYSTEM_GUIDE.md](SYSTEM_GUIDE.md)**.
+
 ## Why we built GuardianMesh
 
 GuardianMesh began with our grandparents. We worry about them all the time:
