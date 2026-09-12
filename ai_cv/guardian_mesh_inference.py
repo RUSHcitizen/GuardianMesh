@@ -13,10 +13,11 @@ import numpy as np
 import argparse
 import json
 import sys
+import time
 import urllib.error
 import urllib.request
-from pathlib import Path
-from datetime import datetime, timezone
+from itertools import islice
+from datetime import datetime
 from collections import deque
 from typing import List, Optional
  
@@ -38,6 +39,9 @@ class GuardianMeshPipeline:
         api_url: Optional[str] = None,
         api_token: Optional[str] = None,
         allow_recording: bool = False,
+        lat: Optional[float] = None,
+        lng: Optional[float] = None,
+        location: Optional[str] = None,
     ):
         self.camera_id = camera_id
         self.visualize = visualize
@@ -46,6 +50,14 @@ class GuardianMeshPipeline:
         self.api_url = api_url.rstrip("/") if api_url else None
         self.api_token = api_token
         self.allow_recording = allow_recording
+        # Camera mounting coordinates (optional; the backend's camera registry is the default)
+        self.camera_place = {
+            key: value
+            for key, value in (("lat", lat), ("lng", lng), ("location", location))
+            if value is not None
+        }
+        # Persons currently above the alert threshold, so we can report when they return to normal
+        self.alerting_person_ids = set()
 
         if output_path and not allow_recording:
             raise ValueError(
@@ -114,7 +126,6 @@ class GuardianMeshPipeline:
             )
         
         frame_idx = 0
-        import time
         last_time = time.time()
         
         while cap.isOpened():
@@ -142,6 +153,14 @@ class GuardianMeshPipeline:
                 self.event_log.appendleft(det)
                 self._log_event(det)
                 self._send_event(det, frame.shape[:2])
+
+            # A person who dropped below the threshold gets one follow-up event with
+            # their current (low) scores, so the backend/dashboard can resolve the incident.
+            alerting_now = {det.person_id for det in detections}
+            for det in self.processor.last_detections:
+                if det.person_id in self.alerting_person_ids and det.person_id not in alerting_now:
+                    self._send_event(det, frame.shape[:2])
+            self.alerting_person_ids = alerting_now
             
             # Write output
             if self.writer:
@@ -243,7 +262,8 @@ class GuardianMeshPipeline:
             -1
         )
         
-        for i, event in enumerate(self.event_log[:10]):
+        # deque does not support slicing
+        for i, event in enumerate(islice(self.event_log, 10)):
             color = self._event_color(event.event_type.value)
             x = timeline_x - 100 + i * 20
             cv2.circle(viz, (x, timeline_y - 7), 3, color, -1)
@@ -286,9 +306,12 @@ class GuardianMeshPipeline:
         )
 
     def _send_event(self, det: EventDetection, frame_shape):
-        """Send event metadata only; never send frames or pose coordinates."""
+        """Send event metadata only; never send camera frames."""
         if not self.api_url:
             return
+
+        payload = det.to_dashboard_dict(frame_shape)
+        payload.update(self.camera_place)
 
         headers = {"Content-Type": "application/json"}
         if self.api_token:
@@ -296,7 +319,7 @@ class GuardianMeshPipeline:
 
         request = urllib.request.Request(
             f"{self.api_url}/api/events",
-            data=json.dumps(det.to_dashboard_dict(frame_shape)).encode("utf-8"),
+            data=json.dumps(payload).encode("utf-8"),
             headers=headers,
             method="POST",
         )
@@ -363,6 +386,9 @@ def main():
         action="store_true",
         help="Explicitly allow saving annotated camera frames"
     )
+    parser.add_argument("--lat", type=float, default=None, help="Camera latitude (optional)")
+    parser.add_argument("--lng", type=float, default=None, help="Camera longitude (optional)")
+    parser.add_argument("--location", type=str, default=None, help="Camera location name (optional)")
     
     args = parser.parse_args()
     
@@ -374,6 +400,9 @@ def main():
         api_url=args.api_url,
         api_token=args.api_token,
         allow_recording=args.allow_recording,
+        lat=args.lat,
+        lng=args.lng,
+        location=args.location,
     )
     
     try:

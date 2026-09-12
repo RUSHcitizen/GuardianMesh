@@ -11,12 +11,19 @@
 import { CONFIG } from './config.js';
 import { createScene } from './scene.js';
 import { createPoseOverlay } from './pose-overlay.js';
-import { $, show } from './util.js';
+import { $, show, clamp } from './util.js';
 
 export function createCamera(refs, { allowSimulation = false } = {}) {
   const { stage, video, sceneCanvas, overlayCanvas } = refs;
   const scene = createScene(sceneCanvas);
   const overlay = createPoseOverlay(overlayCanvas);
+
+  // Layers that must zoom together so the auto-focus stays visually registered.
+  const focusLayers = [sceneCanvas, video, overlayCanvas];
+  for (const layer of focusLayers) {
+    layer.style.transition = 'transform 500ms ease, transform-origin 500ms ease';
+  }
+  let focusedTrackId = null;
 
   const stateEl = $('#stage-state');
   const stateTitle = $('#stage-state-title');
@@ -98,6 +105,7 @@ export function createCamera(refs, { allowSimulation = false } = {}) {
     overlay.setContentSource(null);
     hideStageState();
     setFeedLabel('Simulated feed', 'active');
+    clearFocus();
     emit();
     return true;
   }
@@ -134,6 +142,7 @@ export function createCamera(refs, { allowSimulation = false } = {}) {
       overlay.setContentSource(video);
       hideStageState();
       setFeedLabel('Webcam live', 'active');
+      clearFocus();
       emit();
       return true;
     } catch (err) {
@@ -181,6 +190,7 @@ export function createCamera(refs, { allowSimulation = false } = {}) {
     };
     showStageState('Loading video', 'Preparing the selected video for local pose detection…');
     setFeedLabel('Loading video', 'observing');
+    clearFocus();
     emit();
   }
 
@@ -214,6 +224,36 @@ export function createCamera(refs, { allowSimulation = false } = {}) {
     stage.classList.add('pulse-once');
   }
 
+  /* -- auto-focus ------------------------------------------------------------
+   * Rather than asserting a diagnosis ("fall detected" / person down), the
+   * stage responds to a critical status by zooming the feed toward the
+   * tracked person's body so an operator can visually verify what's
+   * happening. Clears itself the moment nobody is in a critical state.
+   */
+
+  function clearFocus() {
+    if (focusedTrackId === null) return;
+    focusedTrackId = null;
+    for (const layer of focusLayers) {
+      layer.style.transform = '';
+      layer.style.transformOrigin = '';
+    }
+    stage.classList.remove('stage--focused');
+  }
+
+  function focusOnBody(person) {
+    const b = person.boundingBox;
+    if (!b) { clearFocus(); return; }
+    focusedTrackId = person.trackingId;
+    const originX = clamp((b.x + b.width / 2) * 100, 4, 96);
+    const originY = clamp((b.y + b.height / 2) * 100, 4, 96);
+    for (const layer of focusLayers) {
+      layer.style.transformOrigin = `${originX}% ${originY}%`;
+      layer.style.transform = 'scale(1.6)';
+    }
+    stage.classList.add('stage--focused');
+  }
+
   function resize() {
     scene.resize();
     overlay.resize();
@@ -223,6 +263,10 @@ export function createCamera(refs, { allowSimulation = false } = {}) {
   function render(people, t) {
     if (mode === 'simulated') scene.render(people, t);
     overlay.render(people);
+
+    const critical = people.find((p) => p.status === 'critical' && p.boundingBox);
+    if (critical) focusOnBody(critical);
+    else clearFocus();
   }
 
   /* -- wiring -------------------------------------------------------------- */

@@ -79,8 +79,8 @@ class PipelineEvaluator:
             if not ret:
                 break
             
-            # Process frame
-            detections = self.processor.process_frame(frame)
+            # OpenCV decodes BGR; the pose model expects RGB (same as live inference)
+            detections = self.processor.process_frame(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             
             # Get ground truth for this frame
             if frame_idx in anno_by_frame:
@@ -326,6 +326,8 @@ def main():
         args.dataset_dir,
         args.annotation_file
     )
+    if not results:
+        raise SystemExit(1)
     
     # Print summary
     print(f"\n{'='*60}")

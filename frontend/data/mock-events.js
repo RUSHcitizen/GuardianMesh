@@ -8,9 +8,9 @@
 
 /** Mesh nodes: cameras. */
 export const CAMERAS = [
-  { id: 'CAM-01', label: 'CAM 01', location: 'Main Hall',     status: 'normal', people: 1, score: 0.4, online: true },
-  { id: 'CAM-02', label: 'CAM 02', location: 'Main Corridor', status: 'normal', people: 0, score: 0.6, online: true, primary: true },
-  { id: 'CAM-03', label: 'CAM 03', location: 'School Gym',    status: 'normal', people: 1, score: 0.3, online: true },
+  { id: 'CAM-01', label: 'CAM 01', location: 'Main Hall',     status: 'normal', people: 0, score: 0.4, online: true },
+  { id: 'CAM-02', label: 'CAM 02', location: 'Main Corridor', status: 'normal', people: 1, score: 0.6, online: true, primary: true },
+  { id: 'CAM-03', label: 'CAM 03', location: 'School Gym',    status: 'normal', people: 0, score: 0.3, online: true },
   { id: 'CAM-04', label: 'CAM 04', location: 'North Entrance',status: 'normal', people: 0, score: 0.2, online: true }
 ];
 
@@ -29,18 +29,7 @@ export const RESPONDERS = [
 ];
 
 /** People the mesh is tracking anonymously at rest. */
-export const BASELINE_PEOPLE = [
-  {
-    trackingId: 'P-01', cameraId: 'CAM-02', bodyState: 'walking',
-    anchor: { x: -0.22, y: -0.05 }, scale: 0.74, drift: { x: 0.016, y: 0 },
-    state: 'normal', label: 'Normal motion'
-  },
-  {
-    trackingId: 'P-03', cameraId: 'CAM-02', bodyState: 'standing',
-    anchor: { x: 0.30, y: -0.08 }, scale: 0.66, drift: { x: 0, y: 0 },
-    state: 'normal', label: 'Normal motion'
-  }
-];
+export const BASELINE_PEOPLE = [];
 
 /** The subject of the scripted incident. */
 export const SUBJECT = {
@@ -62,7 +51,7 @@ export const EVENT_LABELS = {
   normal: 'Normal motion',
   pose_anomaly: 'Pose anomaly',
   rapid_displacement: 'Rapid vertical displacement',
-  fall: 'Possible fall',
+  fall: 'Movement anomaly',
   collapsed: 'Ground-level pose',
   immobility: 'Prolonged immobility',
   distress: 'Possible distress pattern',

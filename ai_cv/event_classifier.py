@@ -129,8 +129,8 @@ class EventDetection:
     def _dashboard_event_fields(self) -> Tuple[str, str, str]:
         fields = {
             EventType.NORMAL: ("normal", "normal", "Normal motion"),
-            EventType.POSSIBLE_FALL: ("fall", "warning", "Possible fall"),
-            EventType.CONFIRMED_FALL: ("collapsed", "critical", "Ground-level pose"),
+            EventType.POSSIBLE_FALL: ("fall", "warning", "Concerning movement pattern"),
+            EventType.CONFIRMED_FALL: ("collapsed", "critical", "Ground-level pose - attention may be needed"),
             EventType.IMMOBILITY: ("immobility", "warning", "Prolonged immobility"),
             EventType.AGGRESSIVE: ("altercation", "warning", "Erratic movement"),
             EventType.DISTRESS: ("distress", "warning", "Possible distress pattern"),
@@ -367,17 +367,21 @@ class RealtimeProcessor:
         
         # Smoothing buffer per person
         self.score_buffer: Dict[int, List[float]] = {}
+        # Every detection from the latest frame, including ones below the alert threshold
+        self.last_detections: List[EventDetection] = []
     
     def process_frame(self, frame: np.ndarray) -> List[EventDetection]:
         """
         Process frame and return events above threshold.
         """
         detections = self.classifier.process_frame(frame)
-        
+        self.last_detections = detections
+
         # Filter and smooth
         alerts = []
         for det in detections:
-            person_id = det.person_id or -1
+            # person 0 is a real ID; only a missing ID maps to -1
+            person_id = det.person_id if det.person_id is not None else -1
             
             if person_id not in self.score_buffer:
                 self.score_buffer[person_id] = []
@@ -398,8 +402,10 @@ class RealtimeProcessor:
     
     def reset(self):
         """Reset tracker and buffers"""
-        self.classifier.pose_tracker.reset()
+        if self.classifier.pose_tracker is not None:
+            self.classifier.pose_tracker.reset()
         self.score_buffer.clear()
+        self.last_detections = []
  
  
 # Example usage

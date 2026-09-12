@@ -7,7 +7,10 @@ import numpy as np
 from collections import deque
 from dataclasses import dataclass
 from typing import Dict, Optional, List, Tuple
-from .pose_tracker import Pose, Keypoint
+try:
+    from .pose_tracker import Pose, Keypoint
+except ImportError:  # run as a plain script from the repo root
+    from pose_tracker import Pose, Keypoint
  
 @dataclass
 class TemporalFeatures:
@@ -281,6 +284,9 @@ class TemporalAnalyzer:
         shoulder_y = (left_shoulder.y + right_shoulder.y) / 2
         wrist_y = (left_wrist.y + right_wrist.y) / 2
         
+        if shoulder_y <= 0:
+            return 0.0
+
         # Negative = hands above shoulders
         raise_ratio = max(0.0, 1.0 - (wrist_y / shoulder_y))
         return np.clip(raise_ratio, 0.0, 1.0)

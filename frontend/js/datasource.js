@@ -13,7 +13,7 @@ import { CONFIG, apiUrl, authHeaders, backendOrigin, wsUrl } from './config.js';
 import { EVENT_LABELS } from '../data/mock-events.js';
 import {
   addTimelineEvent, guardianState, setCameraStatus, setConfidence, setCorroboration,
-  setGuardianScore, setResponseState, update, upsertIncident
+  setGuardianScore, setLeaderboard, setResponseState, update, upsertIncident
 } from './state.js';
 import { createEventSocket } from './websocket.js';
 import { clockLabel } from './util.js';
@@ -45,6 +45,7 @@ export function normalizeEvent(raw = {}) {
     trackingId,
     cameraId: raw.cameraId || raw.camera_id || null,
     location: raw.location || '',
+    ...coordinatesOf(raw),
     eventType,
     label: LABEL_FOR_STATE[state] || raw.label || EVENT_LABELS[eventType] || eventType,
     confidence: clamp01(confidence),
@@ -95,6 +96,89 @@ const TIMELINE_KIND_FOR_STATUS = {
   critical: 'critical',
   resolved: 'resolved'
 };
+
+/**
+ * Pull a lat/lng pair off a backend payload (incident or camera). Accepts
+ * lat/lng, latitude/longitude, or either shape nested under `coordinates`/`geo`.
+ * Returns {lat, lng} or {} when no valid pair is present. Coordinates describe
+ * where a camera is mounted, never where a person is.
+ */
+export function coordinatesOf(raw) {
+  if (!raw || typeof raw !== 'object') return {};
+  for (const src of [raw, raw.coordinates, raw.geo]) {
+    if (!src || typeof src !== 'object') continue;
+    if (src.lat == null && src.latitude == null) continue;
+    const lat = Number(src.lat ?? src.latitude);
+    const lng = Number(src.lng ?? src.lon ?? src.longitude);
+    if (Number.isFinite(lat) && Number.isFinite(lng)
+      && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+      return { lat, lng };
+    }
+  }
+  return {};
+}
+
+/**
+ * GET {API_BASE}/nearby-help for a location. Throws when the backend is
+ * unconfigured or unreachable; callers treat that as "unavailable".
+ */
+export async function fetchNearbyHelp({ lat, lng, limit = 5 }) {
+  if (!CONFIG.API_BASE) throw new Error('API_BASE not configured');
+  const params = new URLSearchParams({ lat: String(lat), lng: String(lng), limit: String(limit) });
+  const controller = new AbortController();
+  // Backend allows ~4 s for the public lookup; leave headroom beyond that.
+  const timer = window.setTimeout(() => controller.abort(), 10000);
+  try {
+    const res = await fetch(`${apiUrl('/nearby-help')}?${params}`, {
+      headers: authHeaders(),
+      signal: controller.signal
+    });
+    if (!res.ok) throw new Error(`nearby-help request failed: ${res.status}`);
+    return await res.json();
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+/**
+ * GET {API_BASE}/cameras — registry cameras with location and coordinates.
+ * Returns [] when the backend is unreachable.
+ */
+export async function fetchCameras() {
+  try {
+    const res = await fetch(apiUrl('/cameras'), { headers: authHeaders() });
+    if (!res.ok) return [];
+    const body = await res.json();
+    return Array.isArray(body.cameras) ? body.cameras : [];
+  } catch {
+    return [];
+  }
+}
+
+/** GET {API_BASE}/leaderboard — successful rescues per responder. */
+export async function fetchLeaderboard() {
+  const res = await fetch(apiUrl('/leaderboard'), { headers: authHeaders() });
+  if (!res.ok) throw new Error(`leaderboard request failed: ${res.status}`);
+  const data = await res.json();
+  setLeaderboard(data);
+  return data;
+}
+
+/**
+ * POST {API_BASE}/rescues. Idempotent server-side per rescue_key + responder,
+ * so a retried submission never double-counts.
+ */
+export async function postRescue(rescue) {
+  const res = await fetch(apiUrl('/rescues'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(rescue)
+  });
+  if (!res.ok) throw new Error(`rescue submission failed: ${res.status}`);
+  const data = await res.json();
+  setLeaderboard(data.leaderboard);
+  return data;
+}
 
 function clamp01(v) {
   const n = Number(v ?? 0);
@@ -179,6 +263,13 @@ export function createDataSource({ engine }) {
 
       case 'corroboration':
         setCorroboration(payload.entries || [], payload.result || null);
+        return;
+
+      case 'leaderboard':
+        setLeaderboard(payload.data);
+        return;
+
+      case 'pong':
         return;
 
       // The FastAPI backend wraps every CV detection as
@@ -311,6 +402,7 @@ export function createDataSource({ engine }) {
             id: event.cameraId,
             label: String(event.cameraId).replace(/[_-]/g, ' ').toUpperCase(),
             location: event.location || 'Live camera',
+            ...coordinatesOf(event),
             status: event.status,
             people: 1,
             score: event.guardianScore,
@@ -365,6 +457,8 @@ export function createDataSource({ engine }) {
       label: event.label,
       cameraId: event.cameraId,
       location: event.location || cameraLocation(event.cameraId),
+      // only when present, so a later event without coordinates keeps them
+      ...(event.lat != null ? { lat: event.lat, lng: event.lng } : {}),
       confidence: event.confidence,
       guardianScore: event.guardianScore,
       status: event.status,
@@ -427,6 +521,9 @@ export function createDataSource({ engine }) {
       return;
     }
 
+    // A second connect() (e.g. window.guardian.connect()) must not leave the old socket streaming.
+    socket?.close();
+    socket = null;
     setBackendStatus('connecting');
     // An explicit choice to connect is never overridden by the probe: the probe
     // is subject to CORS, the WebSocket is not, so a blocked /api/status must
@@ -488,12 +585,15 @@ export function createDataSource({ engine }) {
       const body = await res.json();
       const known = guardianState.cameras;
       const merged = (body.cameras || []).map((cam) => {
-        const id = cam.camera_id || cam.cameraId;
+        const id = cam.camera_id || cam.cameraId || cam.id;
         const existing = known.find((c) => c.id === id);
         return {
           id,
-          label: existing?.label || String(id).toUpperCase().replace('_', ' '),
-          location: existing?.location || 'Unassigned',
+          label: existing?.label || cam.label || String(id).toUpperCase().replace('_', ' '),
+          // the backend's camera registry knows geography; prefer it when set
+          location: cam.location || existing?.location || 'Unassigned',
+          ...coordinatesOf(existing),
+          ...coordinatesOf(cam),
           status: existing?.status || 'normal',
           people: existing?.people ?? 0,
           score: existing?.score ?? 0,

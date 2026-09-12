@@ -220,25 +220,36 @@ python3.9 -m pip install --only-binary=:all: fastapi==0.115.6 uvicorn==0.34.0 sq
 
 ## Run the backend
 
+From the repository root (port 8000 is what `frontend/js/config.js` uses for local development):
+
 ```powershell
-$env:GUARDIANMESH_ACCESS_TOKEN = "use-a-long-random-token"
-python3.9 -m uvicorn backend.backend_server:app --host 127.0.0.1 --port 8000
+$env:GUARDIANMESH_ACCESS_TOKEN = "use-a-long-random-token"            # optional
+$env:GUARDIANMESH_CAMERAS_FILE = "backend\cameras.json"                # optional, see below
+$env:GUARDIANMESH_TRUSTED_RESPONDERS_FILE = "backend\trusted_responders.json"  # optional
+$env:GOOGLE_MAPS_API_KEY = "..."                                        # optional
+python -m uvicorn backend.backend_server:app --host 127.0.0.1 --port 8000
 ```
 
-`/health` and `/api/status` expose service status. Event data requires `Authorization: Bearer <token>` when the token is configured. The WebSocket endpoint is `/ws/events?token=<token>`.
+`/health` and `/api/status` expose service status. When a token is configured, event data requires `Authorization: Bearer <token>` and the WebSocket endpoint is `/ws/all?token=<token>` (`all` receives every camera; any other client ID receives only that camera's events).
+
+### Camera locations
+
+Incidents, WebSocket events and `/api/cameras` carry `location`, `lat` and `lng` for the camera that produced them. Coordinates come from the event itself when the CV client sends them (`--lat/--lng`), otherwise from the camera registry: copy `backend/cameras.example.json` to `backend/cameras.json` and point `GUARDIANMESH_CAMERAS_FILE` at it. Camera IDs match regardless of spelling (`cam_02` = `CAM-02`). These coordinates drive the dashboard's Nearby Response lookup; they describe where a camera is mounted, never where a person is.
+
+Existing SQLite databases are upgraded automatically on startup (the `location`, `lat` and `lng` columns are added if missing).
 
 ## Run camera inference
 
-With a visible local camera window:
+With a visible local camera window, from the repository root:
 
 ```powershell
-python3.9 -m ai_cv.guardian_mesh_inference --source 0 --camera_id cam_01
+python -m ai_cv.guardian_mesh_inference --source 0 --camera_id cam_01
 ```
 
 Headless, metadata-only mode:
 
 ```powershell
-python3.9 -m ai_cv.guardian_mesh_inference `
+python -m ai_cv.guardian_mesh_inference `
   --source 0 `
   --camera_id cam_01 `
   --no_viz `
@@ -246,7 +257,7 @@ python3.9 -m ai_cv.guardian_mesh_inference `
   --api-token $env:GUARDIANMESH_ACCESS_TOKEN
 ```
 
-Press `q` to stop visible mode. Recording is disabled unless `--allow-recording` is explicitly supplied.
+Add `--lat 47.6 --lng -122.3 --location "Main Corridor"` to send camera coordinates with each event instead of relying on the registry. Press `q` to stop visible mode. Recording is disabled unless `--allow-recording` is explicitly supplied.
 
 ## Frontend contract
 
@@ -344,10 +355,14 @@ its escalation in the backend's own words.
 - **Token** — when `GUARDIANMESH_ACCESS_TOKEN` is set, the frontend sends
   `Authorization: Bearer <token>` on REST and `?token=<token>` on the socket.
 
+### Cloudflare deployment
+
+`worker.js` serves `frontend/` and edge fallbacks for `/api/status`, `/api/nearby-help`, `/api/score`, `/api/cameras` and `/ws/*`. Set `BACKEND_ORIGIN` to forward API/WebSocket traffic to a hosted FastAPI backend (falls back to the edge handlers if it is unreachable or returns 5xx). Secrets: `GOOGLE_MAPS_API_KEY`, `TRUSTED_RESPONDERS_JSON`, `CAMERAS_JSON` (same shapes as the example files in `backend/`). Deploy with `deploy_guardianmesh.ps1`.
+
 ## Validation
 
 ```powershell
-python3.9 -m py_compile ai_cv/*.py backend/*.py
+python -m py_compile ai_cv/*.py backend/*.py
 ```
 
 Run the camera against a short video file with `--no_viz --max_frames 120` when a webcam is unavailable. The evaluator in `ai_cv/evaluate_pipeline.py` is for labeled datasets and is separate from the live path.

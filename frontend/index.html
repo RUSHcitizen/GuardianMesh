@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="styles/base.css" />
   <link rel="stylesheet" href="styles/layout.css" />
   <link rel="stylesheet" href="styles/components.css" />
+  <link rel="stylesheet" href="styles/game.css" />
 </head>
 <body>
   <a class="skip-link" href="#camera-panel">Skip to live guardian feed</a>
@@ -40,6 +41,16 @@
 
       <div class="status-rail" id="status-rail" role="status" aria-label="System health">
         <!-- rendered by js/system-header.js -->
+      </div>
+
+      <div class="game-hud" aria-label="Operator progress">
+        <span class="game-hud__level" title="Operator level"><small>LV</small><b id="game-level">1</b></span>
+        <span class="game-hud__body">
+          <span class="game-hud__rank" id="game-rank">Cadet</span>
+          <span class="game-hud__bar" aria-hidden="true"><span class="game-hud__fill" id="game-xp-fill"></span></span>
+          <span class="game-hud__xp" id="game-xp-text">0 / 100 XP</span>
+        </span>
+        <span class="game-streak" data-hot="false" title="Rescue streak">🔥 <b id="game-streak">0</b></span>
       </div>
 
       <div class="header__controls">
@@ -327,14 +338,65 @@
             </div>
           </div>
 
+          <div class="nearby-help" aria-labelledby="nearby-help-title">
+            <h3 class="subsection__title" id="nearby-help-title">Nearby Response</h3>
+            <p class="nearby-help__hint" id="nearby-help-hint" aria-live="polite">
+              Nearby response options appear when a situation needs attention.
+            </p>
+            <div class="nearby-help__list" id="nearby-help-list"></div>
+            <div class="empty-state" id="nearby-help-empty">
+              <span class="empty-state__hint">No active warning or critical incidents.</span>
+            </div>
+          </div>
+
           <p class="disclaimer">
             Simulated workflow. GuardianMesh recognises observable behaviour and recommends human
             review. It does not contact emergency services and does not diagnose medical conditions.
+            "Nearby Response" is the one live lookup here: when an incident needs attention, it queries
+            the GuardianMesh backend once for public first-aid locations and trusted internal responders
+            near that incident's location.
           </p>
         </div>
       </section>
 
     </main>
+
+    <!-- ==================================================================
+         LEADERBOARD SIDE RAIL
+         ================================================================== -->
+    <aside class="panel leaderboard-panel" aria-labelledby="leaderboard-title">
+      <div class="panel__head">
+        <h2 class="panel__title" id="leaderboard-title">🏆 Rescue Leaderboard</h2>
+        <div class="panel__head-meta">
+          <span class="panel__sub" id="leaderboard-total">0 total</span>
+        </div>
+      </div>
+      <div class="panel__body">
+        <ol class="leaderboard" id="leaderboard-list" aria-live="polite"></ol>
+        <p class="leaderboard__meta">
+          <span>Your rescues <b id="game-my-rescues">0</b></span>
+          <span class="badge" id="leaderboard-sync" data-status="idle">Offline · local</span>
+        </p>
+
+        <h3 class="subsection__title leaderboard__heading">Achievements</h3>
+        <ul class="achievement-grid" id="achievement-grid"></ul>
+
+        <div class="leaderboard__howto">
+          <h3 class="subsection__title">Earn XP</h3>
+          <ul>
+            <li><span>Incident detected</span><b>+25</b></li>
+            <li><span>Critical pattern caught</span><b>+40</b></li>
+            <li><span>Responders dispatched</span><b>+30</b></li>
+            <li><span>Successful rescue</span><b>+150</b></li>
+            <li><span>Rescue within 20 s</span><b>+75</b></li>
+          </ul>
+        </div>
+
+        <button class="btn btn--sm btn--ghost leaderboard__reset" type="button" id="btn-game-reset">Reset my progress</button>
+      </div>
+    </aside>
+
+    <div class="game-toasts" id="game-toasts" aria-live="polite"></div>
   </div>
 
   <!-- Shown only if ES modules fail to boot (e.g. opened via file://) -->

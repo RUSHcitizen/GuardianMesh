@@ -100,8 +100,10 @@ class PoseTracker:
         self.pose_history: Dict[int, deque] = defaultdict(
             lambda: deque(maxlen=30)  # Keep last 30 frames per person
         )
-        self.person_age: Dict[int, int] = defaultdict(int)  # Frame count per person
-        self.track_missed: Dict[int, int] = defaultdict(int)  # Consecutive missed frames
+        self.person_age: Dict[int, int] = defaultdict(int)  # Frames each person has been matched
+        # Frames since each person was last matched; stale tracks are dropped on this,
+        # not on age, so a continuously visible person keeps their ID and history.
+        self.frames_since_seen: Dict[int, int] = {}
         
     def process_frame(self, frame: np.ndarray) -> List[Pose]:
         """
@@ -158,32 +160,35 @@ class PoseTracker:
                 current_detections.append(pose)
         
         # Associate detections to tracked persons (Hungarian-like matching)
-        for person_id in self.tracked_poses:
-            self.track_missed[person_id] += 1
-        self._associate_and_update_tracks(current_detections, frame.shape[:2])
-        
+        seen_ids = self._associate_and_update_tracks(current_detections, frame.shape[:2])
+
         # Remove stale tracks
         self._cleanup_old_tracks()
-        
-        # Return tracked poses with IDs
-        result_poses = list(self.tracked_poses.values())
-        
+
+        # Only poses observed in THIS frame. Re-appending a remembered pose for a
+        # person who wasn't detected would fake a motionless history (false immobility).
+        result_poses = [self.tracked_poses[pid] for pid in seen_ids if pid in self.tracked_poses]
+
         # Store history for temporal features
         for pose in result_poses:
-            if pose.person_id is not None:
-                self.pose_history[pose.person_id].append(pose)
-        
+            self.pose_history[pose.person_id].append(pose)
+
         return result_poses
     
-    def _associate_and_update_tracks(self, detections: List[Pose], frame_shape: Tuple[int, int]):
+    def _associate_and_update_tracks(self, detections: List[Pose], frame_shape: Tuple[int, int]) -> List[int]:
         """
         Simple centroid-based tracking.
         For more robust tracking, use DeepSORT or Hungarian algorithm.
+
+        Returns the person IDs matched or created in this frame.
         """
         h, w = frame_shape
-        
+
+        for pid in self.frames_since_seen:
+            self.frames_since_seen[pid] += 1
+
         if not detections:
-            return
+            return []
         
         # Compute centroids
         detection_centroids = [
@@ -191,13 +196,11 @@ class PoseTracker:
             for d in detections
         ]
         
-        tracked_centroids = [
-            (
-                (p.bbox[0] + p.bbox[2]) / 2,
-                (p.bbox[1] + p.bbox[3]) / 2
-            )
-            for p in self.tracked_poses.values()
-        ]
+        tracked_centroids = {
+            pid: ((p.bbox[0] + p.bbox[2]) / 2, (p.bbox[1] + p.bbox[3]) / 2)
+            for pid, p in self.tracked_poses.items()
+        }
+        seen_ids: List[int] = []
         
         # Simple IoU-based matching
         used_detections = set()
@@ -211,7 +214,7 @@ class PoseTracker:
                 
                 # Distance between centroids
                 dist = np.linalg.norm(
-                    np.array(detection_centroids[i]) - np.array(tracked_centroids[list(self.tracked_poses.keys()).index(person_id)])
+                    np.array(detection_centroids[i]) - np.array(tracked_centroids[person_id])
                 )
                 
                 # Also check IoU
@@ -229,17 +232,21 @@ class PoseTracker:
                 self.tracked_poses[person_id] = detections[best_match_idx]
                 self.tracked_poses[person_id].person_id = person_id
                 self.person_age[person_id] += 1
-                self.track_missed[person_id] = 0
+                self.frames_since_seen[person_id] = 0
                 used_detections.add(best_match_idx)
-        
+                seen_ids.append(person_id)
+
         # New detections become new tracks
         for i, detection in enumerate(detections):
             if i not in used_detections:
                 detection.person_id = self.next_person_id
                 self.tracked_poses[self.next_person_id] = detection
                 self.person_age[self.next_person_id] = 1
-                self.track_missed[self.next_person_id] = 0
+                self.frames_since_seen[self.next_person_id] = 0
+                seen_ids.append(self.next_person_id)
                 self.next_person_id += 1
+
+        return seen_ids
     
     def _bbox_iou(self, bbox1: Tuple, bbox2: Tuple) -> float:
         """Compute Intersection over Union of two bboxes"""
@@ -266,15 +273,14 @@ class PoseTracker:
     def _cleanup_old_tracks(self):
         """Remove tracks that haven't been seen in a while"""
         to_remove = [
-            pid for pid, missed in self.track_missed.items()
+            pid for pid, missed in self.frames_since_seen.items()
             if missed > self.max_person_tracking_age
         ]
         for pid in to_remove:
-            del self.tracked_poses[pid]
-            del self.person_age[pid]
-            del self.track_missed[pid]
-            if pid in self.pose_history:
-                del self.pose_history[pid]
+            self.tracked_poses.pop(pid, None)
+            self.person_age.pop(pid, None)
+            self.frames_since_seen.pop(pid, None)
+            self.pose_history.pop(pid, None)
     
     def get_pose_history(self, person_id: int, window_size: Optional[int] = None) -> deque:
         """Get pose history for a person for temporal feature extraction"""
@@ -288,6 +294,6 @@ class PoseTracker:
         self.tracked_poses.clear()
         self.pose_history.clear()
         self.person_age.clear()
-        self.track_missed.clear()
+        self.frames_since_seen.clear()
         self.next_person_id = 0
  

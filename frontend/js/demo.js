@@ -119,7 +119,7 @@ export function createDemo(ctx) {
         meta({ status: 'tracking', label: 'Normal motion' });
         setAssessment({ focusPersonId: subjectId });
         setGuardianScore(1.2);
-        setCameraStatus('CAM-02', { people: 3 });
+        setCameraStatus('CAM-02', { people: 1 });
         addTimelineEvent({
           kind: 'observation',
           title: 'Anonymous track P-02 established on CAM-02 — normal gait, upright posture.',
@@ -164,14 +164,14 @@ export function createDemo(ctx) {
       name: 'Ground-level pose',
       run() {
         body('ground', 560);
-        meta({ status: 'warning', label: 'Possible fall', confidence: 0.61, score: 4.6 });
-        setGuardianScore(4.6, { eventType: 'fall', eventLabel: 'Possible fall' });
+        meta({ status: 'warning', label: 'Movement anomaly', confidence: 0.61, score: 4.6 });
+        setGuardianScore(4.6, { eventType: 'fall', eventLabel: 'Movement anomaly' });
         setConfidence(0.61);
         camera.setStatus('warning');
         setCameraStatus('CAM-02', { status: 'warning', score: 4.6 });
         incident({
           status: 'elevated',
-          label: 'Possible fall — pattern under observation',
+          label: 'Movement anomaly — pattern under observation',
           eventType: 'fall',
           confidence: 0.61,
           guardianScore: 4.6,
@@ -182,7 +182,7 @@ export function createDemo(ctx) {
         addTimelineEvent({
           kind: 'warning',
           title: 'Ground-level pose detected — person has reached floor level.',
-          facts: [fact('Event', 'Possible fall'), fact('Confidence', '61%'), fact('Score', '4.6')]
+          facts: [fact('Event', 'Movement anomaly'), fact('Confidence', '61%'), fact('Score', '4.6')]
         });
       }
     },
@@ -211,7 +211,7 @@ export function createDemo(ctx) {
         setConfidence(0.72);
         incident({
           status: 'warning',
-          label: 'Possible fall — person remaining on the ground',
+          label: 'Movement anomaly — person remaining on the ground',
           confidence: 0.72,
           guardianScore: 6.5,
           immobilitySeconds: imm(),
@@ -275,7 +275,7 @@ export function createDemo(ctx) {
       run() {
         addTimelineEvent({
           kind: 'critical',
-          title: 'Distress pattern confirmed — sustained immobility following a ground-level pose.',
+          title: 'Concerning pattern detected — sustained immobility following a ground-level pose.',
           facts: [fact('Confidence', '94%'), fact('Immobility', `${imm()} s`)]
         });
         addTimelineEvent({
@@ -291,7 +291,7 @@ export function createDemo(ctx) {
       run() {
         incident({
           status: 'critical',
-          label: 'Possible fall / distress pattern',
+          label: 'Movement anomaly / distress pattern',
           eventType: 'distress',
           confidence: 0.94,
           guardianScore: 8.7,
@@ -340,7 +340,7 @@ export function createDemo(ctx) {
         setResponderState('RSP-AID', 'acknowledged');
         incident({
           status: 'critical',
-          label: 'Possible fall / distress pattern',
+          label: 'Movement anomaly / distress pattern',
           confidence: 0.94,
           guardianScore: 8.7,
           immobilitySeconds: imm(),
@@ -428,7 +428,7 @@ export function createDemo(ctx) {
         setCameraStatus('CAM-02', { status: 'normal', score: 1.8 });
         incident({
           status: 'resolved',
-          label: 'Possible fall / distress pattern — resolved',
+          label: 'Movement anomaly / distress pattern — resolved',
           guardianScore: 1.8,
           confidence: 0,
           responseState: 'Event resolved — no further action'

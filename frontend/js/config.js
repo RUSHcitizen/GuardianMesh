@@ -1,7 +1,16 @@
 /**
- * GuardianMesh — runtime configuration.
- * Every integration point a teammate needs to change lives in this file.
+ * GuardianMesh runtime configuration.
+ * Local frontend development talks to FastAPI on :8000.
+ * Deployed pages use the same-origin Cloudflare Worker API/WebSocket routes.
  */
+
+// Only the static dev servers (`npm start` on :8080, Live Server on :5500) sit
+// apart from the backend. Anything else — `wrangler dev`, a deployed Worker, or
+// uvicorn serving the page — answers the API on its own origin.
+const LOCAL_STATIC_SERVERS = new Set(['8080', '5500']);
+const IS_LOCAL_FRONTEND = typeof window !== 'undefined'
+  && ['localhost', '127.0.0.1'].includes(window.location.hostname)
+  && LOCAL_STATIC_SERVERS.has(window.location.port);
 
 export const CONFIG = {
   /**
@@ -38,12 +47,12 @@ export const CONFIG = {
   BACKEND_ENABLED: false,
 
   /**
-   * Where the backend lives. It runs on its own port (uvicorn defaults to
-   * 127.0.0.1:8000) while the frontend is served separately, so this must be
-   * absolute. Set to null to use the page's own origin instead — useful if
-   * you put both behind one reverse proxy.
+   * Where the backend lives. Locally it runs on its own port (uvicorn defaults
+   * to 127.0.0.1:8000) while the frontend is served separately. Deployed pages
+   * use their own origin, where worker.js serves the API (nearby help, rescue
+   * leaderboard) — an HTTPS page could not reach an http:// localhost anyway.
    */
-  BACKEND_ORIGIN: 'http://127.0.0.1:8000',
+  BACKEND_ORIGIN: IS_LOCAL_FRONTEND ? 'http://127.0.0.1:8000' : null,
 
   /** REST base, resolved against BACKEND_ORIGIN. */
   API_BASE: '/api',
@@ -73,12 +82,6 @@ export const CONFIG = {
    *  ladder is exhausted the socket stops retrying and the header reports
    *  DISCONNECTED; call window.guardian.connect() to try again. */
   RECONNECT_BACKOFF_MS: [1000, 2000, 4000, 8000, 15000],
-
-  /**
-   * Only open the WebSocket if GET {API_BASE}/status answers first.
-   * Keeps the console clean during offline demos. Set to false if your
-   * backend exposes the event stream without a REST status route.
-   */
   REQUIRE_API_PROBE: true,
 
   /**
@@ -88,7 +91,6 @@ export const CONFIG = {
    */
   VIDEO_SOURCE_URL: null,
 
-  /** Guardian Score band thresholds (lower bound, inclusive). */
   SCORE_BANDS: [
     { min: 8.0, key: 'critical', label: 'Critical' },
     { min: 6.0, key: 'high', label: 'High' },
@@ -121,10 +123,7 @@ export const CONFIG = {
     normaliseTimeMs: 900
   },
 
-  /** Maximum timeline entries kept in memory/DOM. */
   TIMELINE_LIMIT: 60,
-
-  /** Samples retained for the score sparkline. */
   TREND_SAMPLES: 90
 };
 

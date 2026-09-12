@@ -722,6 +722,18 @@
 }
 @keyframes linkFlow { to { left: 100%; } }
 
+/* Responder cards are buttons — reset native chrome, keep the existing look */
+button.responder {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+button.responder:hover { border-color: color-mix(in srgb, var(--status-color) 55%, transparent); }
+button.responder:focus-visible { outline: 2px solid var(--tracking); outline-offset: 2px; }
+button.responder:disabled { cursor: wait; opacity: 0.7; }
+
 .recommended { display: flex; flex-direction: column; gap: var(--space-2); }
 .recommended__list { display: flex; flex-direction: column; gap: var(--space-1); }
 .rec-item {
@@ -736,6 +748,36 @@
 }
 .rec-item__mark { color: var(--tracking); font-family: var(--font-mono); font-size: var(--fs-micro); padding-top: 2px; }
 .rec-item--enter { animation: tlEnter var(--dur-base) var(--ease) 1; }
+
+.nearby-help { display: flex; flex-direction: column; gap: var(--space-2); }
+.nearby-help__hint { font-size: var(--fs-xs); color: var(--text-secondary); line-height: 1.45; margin: 0; }
+.nearby-help__list { display: flex; flex-direction: column; gap: var(--space-2); }
+.nearby-group { display: flex; flex-direction: column; gap: var(--space-1); }
+.nearby-group__title {
+  margin: 0;
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.nearby-group__note { margin: 0; font-size: var(--fs-xs); color: var(--text-secondary); }
+.nearby-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-xs);
+}
+.nearby-item__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
+.nearby-item__body { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.nearby-item__meta { font-size: var(--fs-micro); color: var(--text-muted); white-space: nowrap; }
+.nearby-item__addr { font-size: var(--fs-micro); color: var(--text-secondary); overflow-wrap: anywhere; }
+.nearby-item__link { font-size: var(--fs-micro); color: var(--tracking); text-decoration: none; white-space: nowrap; }
+.nearby-item__link:hover { text-decoration: underline; }
 
 .disclaimer {
   margin-top: auto;

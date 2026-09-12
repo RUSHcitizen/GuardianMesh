@@ -20,6 +20,7 @@ import { createResponsePanel } from './response.js';
 import { createSystemHeader } from './system-header.js';
 import { createTimeline } from './timeline.js';
 import { RESPONDERS } from '../data/mock-events.js';
+import { createGamification } from './gamification.js';
 import {
   addTimelineEvent, clearIncidents, clearTimeline, guardianState, setAssessment,
   setConfidence, setFeatures, setGuardianScore, setResponders, setResponseState,
@@ -43,6 +44,8 @@ const panels = {
   header: createSystemHeader(), score: createScorePanel(), timeline: createTimeline(),
   incidents: createIncidentFeed(), mesh: createMeshPanel(), response: createResponsePanel()
 };
+
+const game = createGamification();
 const dataSource = createDataSource({ engine });
 const demo = createDemo({ engine, camera });
 const liveDirector = createLiveDirector({ camera });
@@ -72,6 +75,7 @@ subscribe((state, changed) => {
   if (touched(changed, 'cameras', 'sensors', 'corroboration', 'corroborationResult',
     'handoff', 'activeCamera')) panels.mesh.render(state);
   if (touched(changed, 'responders', 'responseState', 'recommendations')) panels.response.render(state);
+  if (touched(changed, 'incidents', 'cameras', 'backendStatus')) panels.response.renderNearby(state);
   if (touched(changed, 'dataSource', 'backendStatus', 'aiEngine', 'cameraStatus')) renderDataSourceFlag(state);
 });
 
@@ -82,6 +86,7 @@ function renderAll() {
   panels.incidents.render(guardianState);
   panels.mesh.render(guardianState);
   panels.response.render(guardianState);
+  panels.response.renderNearby(guardianState);
   renderDataSourceFlag(guardianState);
 }
 
@@ -475,7 +480,7 @@ if (!devSimulation) poseDetector.initialize();
 if (params.has('live')) dataSource.connect({ force: true, token: params.get('token') || undefined });
 
 window.guardian = {
-  snapshot, demo, engine, camera, poseDetector, dataSource,
+  snapshot, demo, engine, camera, poseDetector, dataSource, game,
   emit: (payload) => dataSource.handleGuardianEvent(payload),
   score: (value) => update({ previousScore: guardianState.guardianScore, guardianScore: round(value, 1) }),
   connect: (token) => dataSource.connect({ force: true, token }),

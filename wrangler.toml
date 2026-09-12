@@ -1,17 +1,17 @@
 # Cloudflare configuration for the GuardianMesh command center.
 #
-# The deployable artifact is frontend/ — static HTML, CSS and ES modules, with
-# no build step or installed frontend dependencies. The browser fetches the
-# pinned MediaPipe runtime/model, so this is an assets-only Worker: no `main`,
-# just static files.
+# frontend/ is served as static assets (HTML, CSS and ES modules, no build
+# step); the browser fetches the pinned MediaPipe runtime/model itself.
+# worker.js runs first only for /api/*, /health and /ws/*: edge endpoints for
+# nearby help, scoring, cameras and the rescue leaderboard, optionally proxied
+# to a hosted FastAPI backend via the BACKEND_ORIGIN variable.
 #
 # This is deliberately a Workers Static Assets config rather than a Pages one.
 # The deploy command configured for this project is `npx wrangler deploy`, which
 # is the Workers command; a `pages_build_output_dir` key here would make wrangler
 # treat the project as Pages and warn that `wrangler pages deploy` should have
-# been used instead. To go back to Pages, replace the [assets] block with
-# `pages_build_output_dir = "frontend"` AND change the deploy command to
-# `npx wrangler pages deploy frontend` — the two have to agree.
+# been used instead. Pages cannot run worker.js's Durable Object, so the
+# leaderboard and edge APIs require Workers.
 #
 # Python requirements live in requirements/ rather than the repository root:
 # Cloudflare installs any dependency manifest it finds in the build root, which
@@ -20,10 +20,21 @@
 # release after 0.10.8 removes the `mp.solutions` API ai_cv/pose_tracker.py uses.
 
 name = "guardianmesh"
+main = "worker.js"
 compatibility_date = "2026-09-12"
 
 [assets]
 directory = "./frontend"
-# Left at the default (404 for unknown paths) on purpose. SPA fallback would
-# serve index.html for a mistyped /js/*.js, so a broken module would surface as
-# a confusing syntax error instead of an honest 404.
+binding = "ASSETS"
+run_worker_first = ["/api/*", "/health", "/ws/*"]
+# not_found_handling is left at the default (404 for unknown paths) on purpose.
+# SPA fallback would serve index.html for a mistyped /js/*.js, so a broken
+# module would surface as a confusing syntax error instead of an honest 404.
+
+[[durable_objects.bindings]]
+name = "LEADERBOARD"
+class_name = "Leaderboard"
+
+[[migrations]]
+tag = "v1-leaderboard"
+new_sqlite_classes = ["Leaderboard"]
