@@ -1,5 +1,5 @@
-/**
- * GuardianMesh — WebSocket transport.
+﻿/**
+ * GuardianMesh â€” WebSocket transport.
  *
  * Vanilla WebSocket with bounded backoff. Every failure path is non-fatal:
  * the interface reports CONNECTED / RECONNECTING / DISCONNECTED and Demo Mode
@@ -64,7 +64,7 @@ export function createEventSocket({ url, onEvent, onStatus }) {
     const ladder = CONFIG.RECONNECT_BACKOFF_MS;
     if (attempt >= ladder.length) {
       // give up rather than hammering a backend that is not there
-      console.info('[guardian] realtime stream unavailable — staying on demo data.');
+      console.info('[guardian] realtime stream unavailable â€” staying on demo data.');
       report('disconnected');
       return;
     }
@@ -89,3 +89,4 @@ export function createEventSocket({ url, onEvent, onStatus }) {
 
   return { connect, close, send, get ready() { return socket?.readyState === WebSocket.OPEN; } };
 }
+

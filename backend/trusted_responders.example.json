@@ -1,0 +1,29 @@
+[
+  {
+    "id": "staff-01",
+    "label": "Facility Staff A",
+    "category": "facility_staff",
+    "lat": 47.0,
+    "lng": -122.0,
+    "trusted": true,
+    "available": true
+  },
+  {
+    "id": "responder-01",
+    "label": "Designated Responder A",
+    "category": "designated_responder",
+    "lat": 47.001,
+    "lng": -122.001,
+    "trusted": true,
+    "available": true
+  },
+  {
+    "id": "security-01",
+    "label": "Security Desk A",
+    "category": "security_desk",
+    "lat": 46.999,
+    "lng": -121.999,
+    "trusted": true,
+    "available": false
+  }
+]

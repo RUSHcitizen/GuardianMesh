@@ -1,5 +1,5 @@
-/**
- * GuardianMesh — application bootstrap.
+﻿/**
+ * GuardianMesh â€” application bootstrap.
  *
  * Wires the perception layer (pose engine + camera stage), the reasoning
  * readouts (Guardian Score, timeline), and the operational panels (incidents,
@@ -49,7 +49,7 @@ const dataSource = createDataSource({ engine });
 const demo = createDemo({ engine, camera });
 
 /* -------------------------------------------------------------------------
-   State → UI routing
+   State â†’ UI routing
    Each renderer runs only when the state it depends on actually changed.
    ------------------------------------------------------------------------- */
 
@@ -71,6 +71,9 @@ subscribe((state, changed) => {
   if (touched(changed, 'responders', 'responseState', 'recommendations')) {
     panels.response.render(state);
   }
+  if (touched(changed, 'incidents', 'cameras', 'backendStatus')) {
+    panels.response.renderNearby(state);
+  }
   if (touched(changed, 'dataSource', 'backendStatus')) renderDataSourceFlag(state);
 });
 
@@ -81,6 +84,7 @@ function renderAll() {
   panels.incidents.render(guardianState);
   panels.mesh.render(guardianState);
   panels.response.render(guardianState);
+  panels.response.renderNearby(guardianState);
   renderDataSourceFlag(guardianState);
 }
 
@@ -129,7 +133,7 @@ function renderFeatures(people) {
   if (!focus) {
     setFeature(featureEls.vvel, '0.00', 'u/s');
     setFeature(featureEls.motion, '0.00');
-    setFeature(featureEls.angle, '0', '°');
+    setFeature(featureEls.angle, '0', 'Â°');
     setFeature(featureEls.ground, '0.0', 's');
     setFeature(featureEls.immobility, '0.0', 's');
     return;
@@ -142,7 +146,7 @@ function renderFeatures(people) {
   setFeature(featureEls.vvel, vvel.toFixed(2), 'u/s', dropping ? 'critical' : null);
   setFeature(featureEls.motion, f.motionMagnitude.toFixed(3), '',
     f.motionMagnitude < 0.035 ? 'warning' : null);
-  setFeature(featureEls.angle, Math.round(f.bodyAngle).toString(), '°',
+  setFeature(featureEls.angle, Math.round(f.bodyAngle).toString(), 'Â°',
     f.bodyAngle > 45 ? 'warning' : null);
   setFeature(featureEls.ground, (f.groundDurationMs / 1000).toFixed(1), 's',
     f.groundDurationMs > 3000 ? 'warning' : null);
@@ -302,4 +306,5 @@ window.guardian = {
 };
 window.__GUARDIAN_BOOTED__ = true;
 console.info('%c GuardianMesh ', 'background:#55c8ec;color:#071018;font-weight:700',
-  'command center ready — press D to start the demo, R to reset, N to step.');
+  'command center ready â€” press D to start the demo, R to reset, N to step.');
+

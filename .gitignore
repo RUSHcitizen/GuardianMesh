@@ -8,3 +8,4 @@ node_modules/
 frontend/assets/video/*.mp4
 frontend/assets/video/*.webm
 frontend/assets/video/*.mov
+backend/trusted_responders.json

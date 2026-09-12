@@ -1,5 +1,5 @@
-/**
- * GuardianMesh — shared application state.
+﻿/**
+ * GuardianMesh â€” shared application state.
  *
  * One plain object plus a tiny publish/subscribe layer. No state library.
  * Every producer (Demo Mode, WebSocket, REST) mutates state through the
@@ -86,7 +86,7 @@ export function update(patch) {
 export const touched = (changed, ...keys) => keys.some((k) => changed.includes(k));
 
 /* ---------------------------------------------------------------------------
-   Actions — the single vocabulary shared by Demo Mode and the live backend
+   Actions â€” the single vocabulary shared by Demo Mode and the live backend
    --------------------------------------------------------------------------- */
 
 export function setSystem(patch) {
@@ -225,3 +225,4 @@ export function snapshot() {
     })
   );
 }
+

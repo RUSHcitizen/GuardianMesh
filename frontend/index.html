@@ -1,9 +1,9 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>GuardianMesh — AI Emergency Awareness Network</title>
+  <title>GuardianMesh â€” AI Emergency Awareness Network</title>
   <meta name="description" content="GuardianMesh command center: anonymous pose tracking, temporal reasoning, Guardian Score and simulated emergency response." />
   <meta name="color-scheme" content="dark" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%23071018'/%3E%3Cpath d='M12 4 18 6.6v5.1c0 3.4-2.4 6.3-6 7.3-3.6-1-6-3.9-6-7.3V6.6L12 4Z' fill='none' stroke='%2355c8ec' stroke-width='1.4'/%3E%3Ccircle cx='12' cy='11' r='2.1' fill='none' stroke='%2344d19f' stroke-width='1.4'/%3E%3C/svg%3E" />
@@ -90,15 +90,15 @@
                   <span class="hud-chip" id="hud-feed-state" data-status="active">
                     <span class="dot dot--live"></span> Live
                   </span>
-                  <span class="hud-chip">Privacy mode · <strong>Anonymous pose</strong></span>
-                  <span class="hud-chip">Identity data · <strong>Not required</strong></span>
+                  <span class="hud-chip">Privacy mode Â· <strong>Anonymous pose</strong></span>
+                  <span class="hud-chip">Identity data Â· <strong>Not required</strong></span>
                 </div>
               </div>
 
               <div></div>
 
               <div class="hud-row hud-row--bottom">
-                <span class="hud-chip" id="hud-tracks">Tracks · <strong>0</strong></span>
+                <span class="hud-chip" id="hud-tracks">Tracks Â· <strong>0</strong></span>
                 <div class="camera-sources" role="group" aria-label="Camera source">
                   <button class="btn btn--sm" type="button" id="src-simulated" aria-pressed="true">Simulated</button>
                   <button class="btn btn--sm" type="button" id="src-webcam" aria-pressed="false">Webcam</button>
@@ -128,7 +128,7 @@
             </div>
             <div class="feature">
               <span class="feature__label">Body angle</span>
-              <span class="feature__value" id="feat-angle">0<span class="feature__unit">°</span></span>
+              <span class="feature__value" id="feat-angle">0<span class="feature__unit">Â°</span></span>
             </div>
             <div class="feature">
               <span class="feature__label">Ground time</span>
@@ -203,7 +203,7 @@
             </div>
             <div class="readout">
               <span class="readout__label">Person</span>
-              <span class="readout__value" id="ro-person">—</span>
+              <span class="readout__value" id="ro-person">â€”</span>
             </div>
             <div class="readout">
               <span class="readout__label">Immobility</span>
@@ -229,7 +229,7 @@
         <div class="panel__body" id="timeline-scroll">
           <ol class="event-timeline" id="event-timeline" aria-live="polite" aria-relevant="additions"></ol>
           <div class="empty-state" id="timeline-empty">
-            <span class="empty-state__icon" aria-hidden="true">∿</span>
+            <span class="empty-state__icon" aria-hidden="true">âˆ¿</span>
             <span class="empty-state__title">No recent events</span>
             <span class="empty-state__hint">Temporal reasoning steps appear here as the system observes behaviour over time.</span>
           </div>
@@ -241,7 +241,7 @@
         <div class="panel__head">
           <h2 class="panel__title" id="mesh-title">Guardian Mesh</h2>
           <div class="panel__head-meta">
-            <span class="panel__sub" id="mesh-summary">4 nodes · 4 online</span>
+            <span class="panel__sub" id="mesh-summary">4 nodes Â· 4 online</span>
           </div>
         </div>
         <div class="panel__body">
@@ -256,10 +256,10 @@
             </div>
             <div class="corr-result" id="corr-result" data-status="tracking" hidden>
               <span class="corr-result__label">Correlated event</span>
-              <span class="corr-result__value" id="corr-result-label">—</span>
+              <span class="corr-result__value" id="corr-result-label">â€”</span>
               <span class="corr-result__facts">
-                <span>Confidence <b id="corr-result-conf">—</b></span>
-                <span>Guardian Score <b id="corr-result-score">—</b></span>
+                <span>Confidence <b id="corr-result-conf">â€”</b></span>
+                <span>Guardian Score <b id="corr-result-score">â€”</b></span>
               </span>
             </div>
 
@@ -288,7 +288,7 @@
         <div class="panel__body">
           <div class="incident-list" id="incident-list" aria-live="polite"></div>
           <div class="empty-state" id="incident-empty">
-            <span class="empty-state__icon" aria-hidden="true">✓</span>
+            <span class="empty-state__icon" aria-hidden="true">âœ“</span>
             <span class="empty-state__title">No active incidents</span>
             <span class="empty-state__hint">All monitored areas are clear.</span>
           </div>
@@ -320,9 +320,23 @@
             </div>
           </div>
 
+          <div class="nearby-help" aria-labelledby="nearby-help-title">
+            <h3 class="subsection__title" id="nearby-help-title">Nearby Response</h3>
+            <p class="nearby-help__hint" id="nearby-help-hint" aria-live="polite">
+              Nearby response options appear when a situation needs attention.
+            </p>
+            <div class="nearby-help__list" id="nearby-help-list"></div>
+            <div class="empty-state" id="nearby-help-empty">
+              <span class="empty-state__hint">No active warning or critical incidents.</span>
+            </div>
+          </div>
+
           <p class="disclaimer">
             Simulated workflow. GuardianMesh recognises observable behaviour and recommends human
             review. It does not contact emergency services and does not diagnose medical conditions.
+            "Nearby Response" is the one live lookup here: when an incident needs attention, it queries
+            the GuardianMesh backend once for public first-aid locations and trusted internal responders
+            near that incident's location.
           </p>
         </div>
       </section>
@@ -338,7 +352,7 @@
         The interface uses JavaScript modules, which browsers block on <code>file://</code>.
         Serve the <code>frontend/</code> directory over HTTP and reload:
       </p>
-      <code>node server.js&nbsp; &nbsp;→&nbsp; http://localhost:8080</code>
+      <code>node server.js&nbsp; &nbsp;â†’&nbsp; http://localhost:8080</code>
     </div>
   </div>
 
@@ -354,3 +368,4 @@
   </script>
 </body>
 </html>
+

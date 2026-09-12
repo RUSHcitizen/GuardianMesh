@@ -1,8 +1,8 @@
-/**
- * GuardianMesh — data source adapter.
+﻿/**
+ * GuardianMesh â€” data source adapter.
  *
- *   backend / websocket  →  guardianDataSource  →  normalised guardian event
- *                                              →  state actions  →  UI
+ *   backend / websocket  â†’  guardianDataSource  â†’  normalised guardian event
+ *                                              â†’  state actions  â†’  UI
  *
  * Demo Mode and the live backend write through the SAME state actions, so no
  * UI code branches on where data came from. If the backend is absent the UI
@@ -30,6 +30,7 @@ export function normalizeEvent(raw = {}) {
     trackingId: raw.trackingId || raw.track_id || null,
     cameraId: raw.cameraId || raw.camera_id || null,
     location: raw.location || '',
+    ...coordinatesOf(raw),
     eventType,
     label: raw.label || EVENT_LABELS[eventType] || eventType,
     confidence: clamp01(raw.confidence),
@@ -40,6 +41,45 @@ export function normalizeEvent(raw = {}) {
     keypoints: raw.keypoints || [],
     temporalFeatures: raw.temporalFeatures || raw.temporal_features || null
   };
+}
+
+/**
+ * Pull a lat/lng pair off a backend payload (incident or camera). Accepts
+ * lat/lng, latitude/longitude, or either shape nested under `coordinates`/`geo`.
+ * Returns {lat, lng} or {} when no valid pair is present.
+ */
+export function coordinatesOf(raw) {
+  if (!raw || typeof raw !== 'object') return {};
+  for (const src of [raw, raw.coordinates, raw.geo]) {
+    if (!src || typeof src !== 'object') continue;
+    const lat = Number(src.lat ?? src.latitude);
+    const lng = Number(src.lng ?? src.lon ?? src.longitude);
+    if (src.lat == null && src.latitude == null) continue;
+    if (Number.isFinite(lat) && Number.isFinite(lng)
+      && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+      return { lat, lng };
+    }
+  }
+  return {};
+}
+
+/**
+ * GET {API_BASE}/nearby-help for a location. Same backend origin as every
+ * other REST call; throws when the backend is unconfigured or unreachable.
+ */
+export async function fetchNearbyHelp({ lat, lng, limit = 5 }) {
+  if (!CONFIG.API_BASE) throw new Error('API_BASE not configured');
+  const params = new URLSearchParams({ lat: String(lat), lng: String(lng), limit: String(limit) });
+  const controller = new AbortController();
+  // Backend allows ~4 s for the public lookup; leave headroom beyond that.
+  const timer = window.setTimeout(() => controller.abort(), 10000);
+  try {
+    const res = await fetch(`${CONFIG.API_BASE}/nearby-help?${params}`, { signal: controller.signal });
+    if (!res.ok) throw new Error(`nearby-help request failed: ${res.status}`);
+    return await res.json();
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
 function clamp01(v) {
@@ -102,6 +142,7 @@ export function createDataSource({ engine }) {
 
   /** A perception/classification event: drives score, confidence and incidents. */
   function applyEvent(event) {
+    if (event.trackingId) update({ focusPersonId: event.trackingId });
     if (event.keypoints?.length || event.boundingBox) {
       engine.applyExternalTrack({
         trackingId: event.trackingId,
@@ -145,6 +186,8 @@ export function createDataSource({ engine }) {
         label: event.label,
         cameraId: event.cameraId,
         location: event.location,
+        // only when present, so a later update without coordinates keeps them
+        ...(event.lat != null ? { lat: event.lat, lng: event.lng } : {}),
         confidence: event.confidence,
         guardianScore: event.guardianScore,
         status: event.status,
@@ -155,7 +198,7 @@ export function createDataSource({ engine }) {
       });
       addTimelineEvent({
         kind: event.status === 'critical' ? 'critical' : 'observation',
-        title: `${event.label} — ${event.trackingId || 'unknown track'} on ${event.cameraId || 'unknown camera'}.`,
+        title: `${event.label} â€” ${event.trackingId || 'unknown track'} on ${event.cameraId || 'unknown camera'}.`,
         facts: [
           { label: 'Confidence', value: `${Math.round(event.confidence * 100)}%` },
           { label: 'Score', value: Number(event.guardianScore).toFixed(1) }
@@ -197,7 +240,7 @@ export function createDataSource({ engine }) {
     }
 
     if (!reachable) {
-      console.info('[guardian] backend not reachable — demo data source active. '
+      console.info('[guardian] backend not reachable â€” demo data source active. '
         + 'Run window.guardian.connect() to retry once your backend is up.');
       setBackendStatus('disconnected');
       return;
@@ -219,3 +262,6 @@ export function createDataSource({ engine }) {
 
   return { connect, disconnect, handleGuardianEvent, normalizeEvent, get live() { return live; } };
 }
+
+
+

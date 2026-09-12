@@ -1,5 +1,5 @@
-/**
- * GuardianMesh — Demo Mode controller.
+﻿/**
+ * GuardianMesh â€” Demo Mode controller.
  *
  * A deterministic, backend-independent incident story. Every step is a pure
  * function of elapsed time, driven from the single animation loop in app.js,
@@ -7,10 +7,10 @@
  * to a known state.
  *
  * Narrative (the 30-second pitch):
- *   normal motion → rapid vertical displacement → orientation change →
- *   ground-level pose → low motion → prolonged immobility → confidence and
- *   Guardian Score rise → critical distress pattern → incident → mesh
- *   corroboration → simulated response → movement resumed → resolved.
+ *   normal motion â†’ rapid vertical displacement â†’ orientation change â†’
+ *   ground-level pose â†’ low motion â†’ prolonged immobility â†’ confidence and
+ *   Guardian Score rise â†’ critical distress pattern â†’ incident â†’ mesh
+ *   corroboration â†’ simulated response â†’ movement resumed â†’ resolved.
  */
 
 import {
@@ -111,7 +111,7 @@ export function createDemo(ctx) {
         setGuardianScore(1.1, { eventLabel: 'Normal motion', eventType: 'normal' });
         addTimelineEvent({
           kind: 'system',
-          title: 'GuardianMesh online — 4 camera nodes, 2 sensor nodes. Anonymous pose tracking active.',
+          title: 'GuardianMesh online â€” 4 camera nodes, 2 sensor nodes. Anonymous pose tracking active.',
           facts: [fact('Privacy', 'Identity not required')]
         });
       }
@@ -123,10 +123,10 @@ export function createDemo(ctx) {
         meta({ status: 'tracking', label: 'Normal motion' });
         setAssessment({ focusPersonId: subjectId });
         setGuardianScore(1.2);
-        setCameraStatus('CAM-02', { people: 3 });
+        setCameraStatus('CAM-02', { people: 1 });
         addTimelineEvent({
           kind: 'observation',
-          title: 'Anonymous track P-02 established on CAM-02 — normal gait, upright posture.',
+          title: 'Anonymous track P-02 established on CAM-02 â€” normal gait, upright posture.',
           facts: [fact('Track', 'P-02'), fact('Camera', 'CAM-02')]
         });
       }
@@ -144,7 +144,7 @@ export function createDemo(ctx) {
         setCameraBadge('observing', 'Observing');
         addTimelineEvent({
           kind: 'observation',
-          title: 'Rapid vertical displacement detected — abrupt change in movement pattern.',
+          title: 'Rapid vertical displacement detected â€” abrupt change in movement pattern.',
           facts: [fact('Vertical velocity', '-0.82 u/s'), fact('Confidence', '28%')]
         });
       }
@@ -159,8 +159,8 @@ export function createDemo(ctx) {
         setConfidence(0.42);
         addTimelineEvent({
           kind: 'inference',
-          title: 'Torso orientation changed 71° from vertical — body no longer upright.',
-          facts: [fact('Body angle', '71°'), fact('Confidence', '42%')]
+          title: 'Torso orientation changed 71Â° from vertical â€” body no longer upright.',
+          facts: [fact('Body angle', '71Â°'), fact('Confidence', '42%')]
         });
       }
     },
@@ -169,25 +169,25 @@ export function createDemo(ctx) {
       name: 'Ground-level pose',
       run() {
         body('ground', 560);
-        meta({ status: 'warning', label: 'Possible fall', confidence: 0.61, score: 4.6 });
-        setGuardianScore(4.6, { eventType: 'fall', eventLabel: 'Possible fall' });
+        meta({ status: 'warning', label: 'Movement anomaly', confidence: 0.61, score: 4.6 });
+        setGuardianScore(4.6, { eventType: 'fall', eventLabel: 'Movement anomaly' });
         setConfidence(0.61);
         setCameraStatus('CAM-02', { status: 'warning', score: 4.6 });
         setCameraBadge('warning', 'Elevated');
         incident({
           status: 'elevated',
-          label: 'Possible fall — pattern under observation',
+          label: 'Movement anomaly â€” pattern under observation',
           eventType: 'fall',
           confidence: 0.61,
           guardianScore: 4.6,
           immobilitySeconds: 0,
-          responseState: 'Monitoring — no responder dispatched'
+          responseState: 'Monitoring â€” no responder dispatched'
         });
         setResponseState('received', RECOMMENDATIONS.elevated);
         addTimelineEvent({
           kind: 'warning',
-          title: 'Ground-level pose detected — person has reached floor level.',
-          facts: [fact('Event', 'Possible fall'), fact('Confidence', '61%'), fact('Score', '4.6')]
+          title: 'Ground-level pose detected â€” person has reached floor level.',
+          facts: [fact('Event', 'Movement anomaly'), fact('Confidence', '61%'), fact('Score', '4.6')]
         });
       }
     },
@@ -202,7 +202,7 @@ export function createDemo(ctx) {
         setAssessment({ motionState: 'Minimal' });
         addTimelineEvent({
           kind: 'observation',
-          title: 'Movement dropped below threshold — motion magnitude minimal.',
+          title: 'Movement dropped below threshold â€” motion magnitude minimal.',
           facts: [fact('Motion', '0.02'), fact('Score', '5.8')]
         });
       }
@@ -216,15 +216,15 @@ export function createDemo(ctx) {
         setConfidence(0.72);
         incident({
           status: 'warning',
-          label: 'Possible fall — person remaining on the ground',
+          label: 'Movement anomaly â€” person remaining on the ground',
           confidence: 0.72,
           guardianScore: 6.5,
           immobilitySeconds: imm(),
-          responseState: 'Monitoring — gathering temporal evidence'
+          responseState: 'Monitoring â€” gathering temporal evidence'
         });
         addTimelineEvent({
           kind: 'inference',
-          title: `Low motion sustained for ${imm()} s — person remaining on the ground.`,
+          title: `Low motion sustained for ${imm()} s â€” person remaining on the ground.`,
           facts: [fact('Immobility', `${imm()} s`), fact('Confidence', '72%'), fact('Score', '6.5')]
         });
       }
@@ -250,7 +250,7 @@ export function createDemo(ctx) {
         });
         addTimelineEvent({
           kind: 'warning',
-          title: `Prolonged immobility detected — ${imm()} s with no meaningful movement.`,
+          title: `Prolonged immobility detected â€” ${imm()} s with no meaningful movement.`,
           facts: [fact('Immobility', `${imm()} s`), fact('Confidence', '84%'), fact('Score', '7.6')]
         });
       }
@@ -259,7 +259,7 @@ export function createDemo(ctx) {
     /* ----- critical moment, deliberately staggered ------------------------ */
     {
       at: 18000,
-      name: 'Critical — tracking state',
+      name: 'Critical â€” tracking state',
       run() {
         meta({ status: 'critical', label: 'Possible distress pattern', confidence: 0.94, score: 8.7 });
         camera.setStatus('critical');
@@ -269,7 +269,7 @@ export function createDemo(ctx) {
     },
     {
       at: 18180,
-      name: 'Critical — score',
+      name: 'Critical â€” score',
       run() {
         setGuardianScore(8.7, { eventType: 'distress', eventLabel: 'Possible distress pattern' });
         setConfidence(0.94);
@@ -277,27 +277,27 @@ export function createDemo(ctx) {
     },
     {
       at: 18360,
-      name: 'Critical — timeline',
+      name: 'Critical â€” timeline',
       run() {
         addTimelineEvent({
           kind: 'critical',
-          title: 'Distress pattern confirmed — sustained immobility following a ground-level pose.',
+          title: 'Concerning pattern detected â€” sustained immobility following a ground-level pose.',
           facts: [fact('Confidence', '94%'), fact('Immobility', `${imm()} s`)]
         });
         addTimelineEvent({
           kind: 'critical',
-          title: 'Guardian Score → 8.7 (Critical).',
+          title: 'Guardian Score â†’ 8.7 (Critical).',
           facts: [fact('Previous', '7.6'), fact('Band', 'Critical')]
         });
       }
     },
     {
       at: 18540,
-      name: 'Critical — incident',
+      name: 'Critical â€” incident',
       run() {
         incident({
           status: 'critical',
-          label: 'Possible fall / distress pattern',
+          label: 'Movement anomaly / distress pattern',
           eventType: 'distress',
           confidence: 0.94,
           guardianScore: 8.7,
@@ -309,7 +309,7 @@ export function createDemo(ctx) {
     },
     {
       at: 18760,
-      name: 'Critical — mesh corroboration',
+      name: 'Critical â€” mesh corroboration',
       run() {
         setCameraStatus('CAM-02', { status: 'critical', score: 8.7 });
         setCameraStatus('CAM-03', { status: 'warning' });
@@ -317,14 +317,14 @@ export function createDemo(ctx) {
         setHandoff(HANDOFF);
         addTimelineEvent({
           kind: 'inference',
-          title: 'Event corroborated across mesh nodes — CAM-02, CAM-03 and motion sensor agree.',
+          title: 'Event corroborated across mesh nodes â€” CAM-02, CAM-03 and motion sensor agree.',
           facts: [fact('Correlated confidence', '94%'), fact('Correlated score', '8.9')]
         });
       }
     },
     {
       at: 19000,
-      name: 'Critical — response activated',
+      name: 'Critical â€” response activated',
       run() {
         setResponseState('notified', RECOMMENDATIONS.critical);
         setResponderState('RSP-SEC', 'notified');
@@ -332,7 +332,7 @@ export function createDemo(ctx) {
         setResponderState('RSP-DES', 'notified');
         addTimelineEvent({
           kind: 'response',
-          title: 'Response workflow activated — security, first aid and designated responder notified (simulated).',
+          title: 'Response workflow activated â€” security, first aid and designated responder notified (simulated).',
           facts: [fact('Incident', 'INC-001'), fact('Mode', 'Simulated')]
         });
       }
@@ -346,7 +346,7 @@ export function createDemo(ctx) {
         setResponderState('RSP-AID', 'acknowledged');
         incident({
           status: 'critical',
-          label: 'Possible fall / distress pattern',
+          label: 'Movement anomaly / distress pattern',
           confidence: 0.94,
           guardianScore: 8.7,
           immobilitySeconds: imm(),
@@ -390,16 +390,16 @@ export function createDemo(ctx) {
         setCameraStatus('CAM-02', { status: 'warning', score: 6.0 });
         incident({
           status: 'resolving',
-          label: 'Movement resumed — concern decreasing',
+          label: 'Movement resumed â€” concern decreasing',
           confidence: 0.7,
           guardianScore: 6.0,
           immobilitySeconds: 0,
-          responseState: 'Responder on site — monitoring'
+          responseState: 'Responder on site â€” monitoring'
         });
         addTimelineEvent({
           kind: 'observation',
-          title: 'Movement resumed — motion magnitude rising, person self-repositioning.',
-          facts: [fact('Motion', 'Increasing'), fact('Score', '8.7 → 6.0')]
+          title: 'Movement resumed â€” motion magnitude rising, person self-repositioning.',
+          facts: [fact('Motion', 'Increasing'), fact('Score', '8.7 â†’ 6.0')]
         });
       }
     },
@@ -414,11 +414,11 @@ export function createDemo(ctx) {
         setCameraStatus('CAM-02', { status: 'observing', score: 3.3 });
         setCameraStatus('CAM-03', { status: 'normal' });
         setSensorStatus('SEN-01', { status: 'normal' });
-        incident({ guardianScore: 3.3, confidence: 0.5, responseState: 'Person responsive — monitoring' });
+        incident({ guardianScore: 3.3, confidence: 0.5, responseState: 'Person responsive â€” monitoring' });
         addTimelineEvent({
           kind: 'inference',
-          title: 'Sustained voluntary movement — distress indicators decaying.',
-          facts: [fact('Score', '6.0 → 3.3'), fact('Band', 'Elevated')]
+          title: 'Sustained voluntary movement â€” distress indicators decaying.',
+          facts: [fact('Score', '6.0 â†’ 3.3'), fact('Band', 'Elevated')]
         });
       }
     },
@@ -436,12 +436,12 @@ export function createDemo(ctx) {
         setCameraStatus('CAM-02', { status: 'normal', score: 1.8 });
         incident({
           status: 'resolved',
-          label: 'Possible fall / distress pattern — resolved',
+          label: 'Movement anomaly / distress pattern â€” resolved',
           guardianScore: 1.8,
           confidence: 0,
-          responseState: 'Event resolved — no further action'
+          responseState: 'Event resolved â€” no further action'
         });
-        setResponseState('resolved', ['Incident archived — no further action required']);
+        setResponseState('resolved', ['Incident archived â€” no further action required']);
         for (const r of RESPONDERS) setResponderState(r.id, 'resolved');
         setCorroboration(CORROBORATION.entries, {
           ...CORROBORATION.result,
@@ -450,8 +450,8 @@ export function createDemo(ctx) {
         });
         addTimelineEvent({
           kind: 'resolved',
-          title: 'Event resolved — Guardian Score returning to baseline.',
-          facts: [fact('Score', '3.3 → 1.8'), fact('Status', 'Resolved')]
+          title: 'Event resolved â€” Guardian Score returning to baseline.',
+          facts: [fact('Score', '3.3 â†’ 1.8'), fact('Status', 'Resolved')]
         });
       }
     },
@@ -462,7 +462,7 @@ export function createDemo(ctx) {
         setGuardianScore(1.1);
         addTimelineEvent({
           kind: 'system',
-          title: 'Monitoring resumed — all mesh nodes clear.',
+          title: 'Monitoring resumed â€” all mesh nodes clear.',
           facts: [fact('Nodes', '6 / 6 online')]
         });
       }
@@ -550,3 +550,7 @@ export function createDemo(ctx) {
 }
 
 export { guardianState };
+
+
+
+

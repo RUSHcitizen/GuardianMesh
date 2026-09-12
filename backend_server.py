@@ -29,6 +29,8 @@ import logging
 from typing import Dict, List, Optional, Set
 from collections import defaultdict, deque
 import os
+
+from backend.nearby_help import get_nearby_help
  
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -59,16 +61,16 @@ def compute_score(
         and persistence_seconds >= 5
     ):
         state = "DISTRESS_EVENT"
-        reason = "High fall signal with sustained immobility"
+        reason = "Sustained stillness after unusual motion — camera focused on subject for review"
     elif fall_score >= 0.75 and immobility_score >= 0.65:
         state = "VERIFYING"
-        reason = "Possible fall with immobility under verification"
+        reason = "Unusual motion detected — verifying with continued monitoring"
     elif fall_score >= 0.75:
         state = "POSSIBLE_FALL"
-        reason = "Fall signal detected"
+        reason = "Unusual motion detected — monitoring closely"
     else:
         state = "NORMAL"
-        reason = "No significant distress pattern detected"
+        reason = "No unusual activity detected"
 
     return {
         "state": state,
@@ -178,6 +180,7 @@ class EventOutput(BaseModel):
  
 class ScoreRequest(BaseModel):
     """Raw metrics for one-off scoring via /api/score"""
+    camera_id: Optional[str] = None
     fall_score: float
     immobility_score: float
     tracking_confidence: float
@@ -460,17 +463,17 @@ async def ingest_event(event: EventInput, db: Session = Depends(get_db)):
     # Trigger alerts based on backend-derived state. Critical alerts are
     # reserved strictly for confirmed DISTRESS_EVENT.
     if state == "DISTRESS_EVENT":
-        alert_msg = f"🚨 CRITICAL FALL DETECTED on {event.camera_id}"
+        alert_msg = f"🚨 Distress signal confirmed on {event.camera_id} — auto-focusing on subject"
         asyncio.create_task(
             manager.send_alert(event.camera_id, "critical", alert_msg)
         )
     elif state == "VERIFYING":
-        alert_msg = f"⚠️ Possible fall under verification on {event.camera_id}"
+        alert_msg = f"⚠️ Possible incident on {event.camera_id} — verifying"
         asyncio.create_task(
             manager.send_alert(event.camera_id, "high", alert_msg)
         )
     elif state == "POSSIBLE_FALL":
-        alert_msg = f"⚠️ Possible fall on {event.camera_id}"
+        alert_msg = f"⚠️ Unusual motion on {event.camera_id} — monitoring"
         asyncio.create_task(
             manager.send_alert(event.camera_id, "medium", alert_msg)
         )
@@ -497,6 +500,23 @@ async def score(req: ScoreRequest):
         tracking_confidence=req.tracking_confidence,
         persistence_seconds=req.persistence_seconds,
     )
+
+
+@app.get("/api/nearby-help")
+async def nearby_help(
+    lat: float = Query(..., ge=-90, le=90),
+    lng: float = Query(..., ge=-180, le=180),
+    limit: int = Query(5, ge=1, le=5),
+    radius_m: int = Query(5000, ge=100, le=50000),
+):
+    """
+    Nearby-help lookup: public first-aid-capable locations (Google Places)
+    plus trusted internal responders (facility staff, designated responders,
+    security desks). Google Places covers public locations only — it cannot
+    identify private staff or verify anyone as a trusted responder; that
+    comes solely from the local trusted-responder registry.
+    """
+    return await get_nearby_help(lat=lat, lng=lng, limit=limit, radius_m=radius_m)
 
 
 @app.get("/api/cameras")

@@ -1,0 +1,377 @@
+[1mdiff --git a/frontend/data/mock-events.js b/frontend/data/mock-events.js[m
+[1mindex 174e372..865f35f 100644[m
+[1m--- a/frontend/data/mock-events.js[m
+[1m+++ b/frontend/data/mock-events.js[m
+[36m@@ -1,5 +1,5 @@[m
+[31m-/**[m
+[31m- * GuardianMesh — single source of truth for demo/mock data.[m
+[32m+[m[32m﻿/**[m
+[32m+[m[32m * GuardianMesh â€” single source of truth for demo/mock data.[m
+  *[m
+  * Nothing outside this file should hard-code camera names, responder labels,[m
+  * event copy, or incident values. Swap this file for backend data and the UI[m
+[36m@@ -8,9 +8,9 @@[m
+ [m
+ /** Mesh nodes: cameras. */[m
+ export const CAMERAS = [[m
+[31m-  { id: 'CAM-01', label: 'CAM 01', location: 'Main Hall',     status: 'normal', people: 1, score: 0.4, online: true },[m
+[31m-  { id: 'CAM-02', label: 'CAM 02', location: 'Main Corridor', status: 'normal', people: 0, score: 0.6, online: true, primary: true },[m
+[31m-  { id: 'CAM-03', label: 'CAM 03', location: 'School Gym',    status: 'normal', people: 1, score: 0.3, online: true },[m
+[32m+[m[32m  { id: 'CAM-01', label: 'CAM 01', location: 'Main Hall',     status: 'normal', people: 0, score: 0.4, online: true },[m
+[32m+[m[32m  { id: 'CAM-02', label: 'CAM 02', location: 'Main Corridor', status: 'normal', people: 1, score: 0.6, online: true, primary: true },[m
+[32m+[m[32m  { id: 'CAM-03', label: 'CAM 03', location: 'School Gym',    status: 'normal', people: 0, score: 0.3, online: true },[m
+   { id: 'CAM-04', label: 'CAM 04', location: 'North Entrance',status: 'normal', people: 0, score: 0.2, online: true }[m
+ ];[m
+ [m
+[36m@@ -29,18 +29,7 @@[m [mexport const RESPONDERS = [[m
+ ];[m
+ [m
+ /** People the mesh is tracking anonymously at rest. */[m
+[31m-export const BASELINE_PEOPLE = [[m
+[31m-  {[m
+[31m-    trackingId: 'P-01', cameraId: 'CAM-02', bodyState: 'walking',[m
+[31m-    anchor: { x: -0.22, y: -0.05 }, scale: 0.74, drift: { x: 0.016, y: 0 },[m
+[31m-    state: 'normal', label: 'Normal motion'[m
+[31m-  },[m
+[31m-  {[m
+[31m-    trackingId: 'P-03', cameraId: 'CAM-02', bodyState: 'standing',[m
+[31m-    anchor: { x: 0.30, y: -0.08 }, scale: 0.66, drift: { x: 0, y: 0 },[m
+[31m-    state: 'normal', label: 'Normal motion'[m
+[31m-  }[m
+[31m-];[m
+[32m+[m[32mexport const BASELINE_PEOPLE = [];[m
+ [m
+ /** The subject of the scripted incident. */[m
+ export const SUBJECT = {[m
+[36m@@ -80,7 +69,7 @@[m [mexport const RECOMMENDATIONS = {[m
+   ],[m
+   critical: [[m
+     'Alert designated responder',[m
+[31m-    'Display incident location — School Gym, Camera 03 sightline',[m
+[32m+[m[32m    'Display incident location â€” School Gym, Camera 03 sightline',[m
+     'Continue monitoring person P-02',[m
+     'Open live incident view for responder review',[m
+     'Provide on-site emergency-resource information'[m
+[36m@@ -126,3 +115,4 @@[m [mexport const INCIDENT_TEMPLATE = {[m
+   responseState: 'Monitoring',[m
+   timestamp: null[m
+ };[m
+[41m+[m
+[1mdiff --git a/frontend/js/config.js b/frontend/js/config.js[m
+[1mindex ebd79a3..8eef1aa 100644[m
+[1m--- a/frontend/js/config.js[m
+[1m+++ b/frontend/js/config.js[m
+[36m@@ -1,5 +1,5 @@[m
+[31m-/**[m
+[31m- * GuardianMesh — runtime configuration.[m
+[32m+[m[32m﻿/**[m
+[32m+[m[32m * GuardianMesh â€” runtime configuration.[m
+  * Every integration point a teammate needs to change lives in this file.[m
+  */[m
+ [m
+[36m@@ -10,13 +10,13 @@[m [mexport const CONFIG = {[m
+    * While this is false the frontend makes NO network requests at all: it runs[m
+    * entirely on demo data. That is deliberate. A reachability probe against a[m
+    * plain static server answers 404, and the browser logs that 404 to the[m
+[31m-   * console itself — no JavaScript can suppress it — which is noise nobody[m
+[32m+[m[32m   * console itself â€” no JavaScript can suppress it â€” which is noise nobody[m
+    * wants on a projector during a demo.[m
+    *[m
+    * You do not have to edit this file to test a live backend: run[m
+    * window.guardian.connect() in the console and it connects immediately.[m
+    */[m
+[31m-  BACKEND_ENABLED: false,[m
+[32m+[m[32m  BACKEND_ENABLED: true,[m
+ [m
+   /** Backend REST base. Set to null to disable probing entirely. */[m
+   API_BASE: '/api',[m
+[36m@@ -74,3 +74,4 @@[m [mexport const WS_URL = (() => {[m
+   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';[m
+   return `${proto}//${window.location.host}${CONFIG.WS_PATH}`;[m
+ })();[m
+[41m+[m
+[1mdiff --git a/frontend/js/demo.js b/frontend/js/demo.js[m
+[1mindex 08b8a74..2af5110 100644[m
+[1m--- a/frontend/js/demo.js[m
+[1m+++ b/frontend/js/demo.js[m
+[36m@@ -1,5 +1,5 @@[m
+[31m-/**[m
+[31m- * GuardianMesh — Demo Mode controller.[m
+[32m+[m[32m﻿/**[m
+[32m+[m[32m * GuardianMesh â€” Demo Mode controller.[m
+  *[m
+  * A deterministic, backend-independent incident story. Every step is a pure[m
+  * function of elapsed time, driven from the single animation loop in app.js,[m
+[36m@@ -7,10 +7,10 @@[m
+  * to a known state.[m
+  *[m
+  * Narrative (the 30-second pitch):[m
+[31m- *   normal motion → rapid vertical displacement → orientation change →[m
+[31m- *   ground-level pose → low motion → prolonged immobility → confidence and[m
+[31m- *   Guardian Score rise → critical distress pattern → incident → mesh[m
+[31m- *   corroboration → simulated response → movement resumed → resolved.[m
+[32m+[m[32m *   normal motion â†’ rapid vertical displacement â†’ orientation change â†’[m
+[32m+[m[32m *   ground-level pose â†’ low motion â†’ prolonged immobility â†’ confidence and[m
+[32m+[m[32m *   Guardian Score rise â†’ critical distress pattern â†’ incident â†’ mesh[m
+[32m+[m[32m *   corroboration â†’ simulated response â†’ movement resumed â†’ resolved.[m
+  */[m
+ [m
+ import {[m
+[36m@@ -111,7 +111,7 @@[m [mexport function createDemo(ctx) {[m
+         setGuardianScore(1.1, { eventLabel: 'Normal motion', eventType: 'normal' });[m
+         addTimelineEvent({[m
+           kind: 'system',[m
+[31m-          title: 'GuardianMesh online — 4 camera nodes, 2 sensor nodes. Anonymous pose tracking active.',[m
+[32m+[m[32m          title: 'GuardianMesh online â€” 4 camera nodes, 2 sensor nodes. Anonymous pose tracking active.',[m
+           facts: [fact('Privacy', 'Identity not required')][m
+         });[m
+       }[m
+[36m@@ -123,10 +123,10 @@[m [mexport function createDemo(ctx) {[m
+         meta({ status: 'tracking', label: 'Normal motion' });[m
+         setAssessment({ focusPersonId: subjectId });[m
+         setGuardianScore(1.2);[m
+[31m-        setCameraStatus('CAM-02', { people: 3 });[m
+[32m+[m[32m        setCameraStatus('CAM-02', { people: 1 });[m
+         addTimelineEvent({[m
+           kind: 'observation',[m
+[31m-          title: 'Anonymous track P-02 established on CAM-02 — normal gait, upright posture.',[m
+[32m+[m[32m          title: 'Anonymous track P-02 established on CAM-02 â€” normal gait, upright posture.',[m
+           facts: [fact('Track', 'P-02'), fact('Camera', 'CAM-02')][m
+         });[m
+       }[m
+[36m@@ -144,7 +144,7 @@[m [mexport function createDemo(ctx) {[m
+         setCameraBadge('observing', 'Observing');[m
+         addTimelineEvent({[m
+           kind: 'observation',[m
+[31m-          title: 'Rapid vertical displacement detected — abrupt change in movement pattern.',[m
+[32m+[m[32m          title: 'Rapid vertical displacement detected â€” abrupt change in movement pattern.',[m
+           facts: [fact('Vertical velocity', '-0.82 u/s'), fact('Confidence', '28%')][m
+         });[m
+       }[m
+[36m@@ -159,8 +159,8 @@[m [mexport function createDemo(ctx) {[m
+         setConfidence(0.42);[m
+         addTimelineEvent({[m
+           kind: 'inference',[m
+[31m-          title: 'Torso orientation changed 71° from vertical — body no longer upright.',[m
+[31m-          facts: [fact('Body angle', '71°'), fact('Confidence', '42%')][m
+[32m+[m[32m          title: 'Torso orientation changed 71Â° from vertical â€” body no longer upright.',[m
+[32m+[m[32m          facts: [fact('Body angle', '71Â°'), fact('Confidence', '42%')][m
+         });[m
+       }[m
+     },[m
+[36m@@ -176,17 +176,17 @@[m [mexport function createDemo(ctx) {[m
+         setCameraBadge('warning', 'Elevated');[m
+         incident({[m
+           status: 'elevated',[m
+[31m-          label: 'Possible fall — pattern under observation',[m
+[32m+[m[32m          label: 'Possible fall â€” pattern under observation',[m
+           eventType: 'fall',[m
+           confidence: 0.61,[m
+           guardianScore: 4.6,[m
+           immobilitySeconds: 0,[m
+[31m-          responseState: 'Monitoring — no responder dispatched'[m
+[32m+[m[32m          responseState: 'Monitoring â€” no responder dispatched'[m
+         });[m
+         setResponseState('received', RECOMMENDATIONS.elevated);[m
+         addTimelineEvent({[m
+           kind: 'warning',[m
+[31m-          title: 'Ground-level pose detected — person has reached floor level.',[m
+[32m+[m[32m          title: 'Ground-level pose detected â€” person has reached floor level.',[m
+           facts: [fact('Event', 'Possible fall'), fact('Confidence', '61%'), fact('Score', '4.6')][m
+         });[m
+       }[m
+[36m@@ -202,7 +202,7 @@[m [mexport function createDemo(ctx) {[m
+         setAssessment({ motionState: 'Minimal' });[m
+         addTimelineEvent({[m
+           kind: 'observation',[m
+[31m-          title: 'Movement dropped below threshold — motion magnitude minimal.',[m
+[32m+[m[32m          title: 'Movement dropped below threshold â€” motion magnitude minimal.',[m
+           facts: [fact('Motion', '0.02'), fact('Score', '5.8')][m
+         });[m
+       }[m
+[36m@@ -216,15 +216,15 @@[m [mexport function createDemo(ctx) {[m
+         setConfidence(0.72);[m
+         incident({[m
+           status: 'warning',[m
+[31m-          label: 'Possible fall — person remaining on the ground',[m
+[32m+[m[32m          label: 'Possible fall â€” person remaining on the ground',[m
+           confidence: 0.72,[m
+           guardianScore: 6.5,[m
+           immobilitySeconds: imm(),[m
+[31m-          responseState: 'Monitoring — gathering temporal evidence'[m
+[32m+[m[32m          responseState: 'Monitoring â€” gathering temporal evidence'[m
+         });[m
+         addTimelineEvent({[m
+           kind: 'inference',[m
+[31m-          title: `Low motion sustained for ${imm()} s — person remaining on the ground.`,[m
+[32m+[m[32m          title: `Low motion sustained for ${imm()} s â€” person remaining on the ground.`,[m
+           facts: [fact('Immobility', `${imm()} s`), fact('Confidence', '72%'), fact('Score', '6.5')][m
+         });[m
+       }[m
+[36m@@ -250,7 +250,7 @@[m [mexport function createDemo(ctx) {[m
+         });[m
+         addTimelineEvent({[m
+           kind: 'warning',[m
+[31m-          title: `Prolonged immobility detected — ${imm()} s with no meaningful movement.`,[m
+[32m+[m[32m          title: `Prolonged immobility detected â€” ${imm()} s with no meaningful movement.`,[m
+           facts: [fact('Immobility', `${imm()} s`), fact('Confidence', '84%'), fact('Score', '7.6')][m
+         });[m
+       }[m
+[36m@@ -259,7 +259,7 @@[m [mexport function createDemo(ctx) {[m
+     /* ----- critical moment, deliberately staggered ------------------------ */[m
+     {[m
+       at: 18000,[m
+[31m-      name: 'Critical — tracking state',[m
+[32m+[m[32m      name: 'Critical â€” tracking state',[m
+       run() {[m
+         meta({ status: 'critical', label: 'Possible distress pattern', confidence: 0.94, score: 8.7 });[m
+         camera.setStatus('critical');[m
+[36m@@ -269,7 +269,7 @@[m [mexport function createDemo(ctx) {[m
+     },[m
+     {[m
+       at: 18180,[m
+[31m-      name: 'Critical — score',[m
+[32m+[m[32m      name: 'Critical â€” score',[m
+       run() {[m
+         setGuardianScore(8.7, { eventType: 'distress', eventLabel: 'Possible distress pattern' });[m
+         setConfidence(0.94);[m
+[36m@@ -277,23 +277,23 @@[m [mexport function createDemo(ctx) {[m
+     },[m
+     {[m
+       at: 18360,[m
+[31m-      name: 'Critical — timeline',[m
+[32m+[m[32m      name: 'Critical â€” timeline',[m
+       run() {[m
+         addTimelineEvent({[m
+           kind: 'critical',[m
+[31m-          title: 'Distress pattern confirmed — sustained immobility following a ground-level pose.',[m
+[32m+[m[32m          title: 'Distress pattern confirmed â€” sustained immobility following a ground-level pose.',[m
+           facts: [fact('Confidence', '94%'), fact('Immobility', `${imm()} s`)][m
+         });[m
+         addTimelineEvent({[m
+           kind: 'critical',[m
+[31m-          title: 'Guardian Score → 8.7 (Critical).',[m
+[32m+[m[32m          title: 'Guardian Score â†’ 8.7 (Critical).',[m
+           facts: [fact('Previous', '7.6'), fact('Band', 'Critical')][m
+         });[m
+       }[m
+     },[m
+     {[m
+       at: 18540,[m
+[31m-      name: 'Critical — incident',[m
+[32m+[m[32m      name: 'Critical â€” incident',[m
+       run() {[m
+         incident({[m
+           status: 'critical',[m
+[36m@@ -309,7 +309,7 @@[m [mexport function createDemo(ctx) {[m
+     },[m
+     {[m
+       at: 18760,[m
+[31m-      name: 'Critical — mesh corroboration',[m
+[32m+[m[32m      name: 'Critical â€” mesh corroboration',[m
+       run() {[m
+         setCameraStatus('CAM-02', { status: 'critical', score: 8.7 });[m
+         setCameraStatus('CAM-03', { status: 'warning' });[m
+[36m@@ -317,14 +317,14 @@[m [mexport function createDemo(ctx) {[m
+         setHandoff(HANDOFF);[m
+         addTimelineEvent({[m
+           kind: 'inference',[m
+[31m-          title: 'Event corroborated across mesh nodes — CAM-02, CAM-03 and motion sensor agree.',[m
+[32m+[m[32m          title: 'Event corroborated across mesh nodes â€” CAM-02, CAM-03 and motion sensor agree.',[m
+           facts: [fact('Correlated confidence', '94%'), fact('Correlated score', '8.9')][m
+         });[m
+       }[m
+     },[m
+     {[m
+       at: 19000,[m
+[31m-      name: 'Critical — response activated',[m
+[32m+[m[32m      name: 'Critical â€” response activated',[m
+       run() {[m
+         setResponseState('notified', RECOMMENDATIONS.critical);[m
+         setResponderState('RSP-SEC', 'notified');[m
+[36m@@ -332,7 +332,7 @@[m [mexport function createDemo(ctx) {[m
+         setResponderState('RSP-DES', 'notified');[m
+         addTimelineEvent({[m
+           kind: 'response',[m
+[31m-          title: 'Response workflow activated — security, first aid and designated responder notified (simulated).',[m
+[32m+[m[32m          title: 'Response workflow activated â€” security, first aid and designated responder notified (simulated).',[m
+           facts: [fact('Incident', 'INC-001'), fact('Mode', 'Simulated')][m
+         });[m
+       }[m
+[36m@@ -390,16 +390,16 @@[m [mexport function createDemo(ctx) {[m
+         setCameraStatus('CAM-02', { status: 'warning', score: 6.0 });[m
+         incident({[m
+           status: 'resolving',[m
+[31m-          label: 'Movement resumed — concern decreasing',[m
+[32m+[m[32m          label: 'Movement resumed â€” concern decreasing',[m
+           confidence: 0.7,[m
+           guardianScore: 6.0,[m
+           immobilitySeconds: 0,[m
+[31m-          responseState: 'Responder on site — monitoring'[m
+[32m+[m[32m          responseState: 'Responder on site â€” monitoring'[m
+         });[m
+         addTimelineEvent({[m
+           kind: 'observation',[m
+[31m-          title: 'Movement resumed — motion magnitude rising, person self-repositioning.',[m
+[31m-          facts: [fact('Motion', 'Increasing'), fact('Score', '8.7 → 6.0')][m
+[32m+[m[32m          title: 'Movement resumed â€” motion magnitude rising, person self-repositioning.',[m
+[32m+[m[32m          facts: [fact('Motion', 'Increasing'), fact('Score', '8.7 â†’ 6.0')][m
+         });[m
+       }[m
+     },[m
+[36m@@ -414,11 +414,11 @@[m [mexport function createDemo(ctx) {[m
+         setCameraStatus('CAM-02', { status: 'observing', score: 3.3 });[m
+         setCameraStatus('CAM-03', { status: 'normal' });[m
+         setSensorStatus('SEN-01', { status: 'normal' });[m
+[31m-        incident({ guardianScore: 3.3, confidence: 0.5, responseState: 'Person responsive — monitoring' });[m
+[32m+[m[32m        incident({ guardianScore: 3.3, confidence: 0.5, responseState: 'Person responsive â€” monitoring' });[m
+         addTimelineEvent({[m
+           kind: 'inference',[m
+[31m-          title: 'Sustained voluntary movement — distress indicators decaying.',[m
+[31m-          facts: [fact('Score', '6.0 → 3.3'), fact('Band', 'Elevated')][m
+[32m+[m[32m          title: 'Sustained voluntary movement â€” distress indicators decaying.',[m
+[32m+[m[32m          facts: [fact('Score', '6.0 â†’ 3.3'), fact('Band', 'Elevated')][m
+         });[m
+       }[m
+     },[m
+[36m@@ -436,12 +436,12 @@[m [mexport function createDemo(ctx) {[m
+         setCameraStatus('CAM-02', { status: 'normal', score: 1.8 });[m
+         incident({[m
+           status: 'resolved',[m
+[31m-          label: 'Possible fall / distress pattern — resolved',[m
+[32m+[m[32m          label: 'Possible fall / distress pattern â€” resolved',[m
+           guardianScore: 1.8,[m
+           confidence: 0,[m
+[31m-          responseState: 'Event resolved — no further action'[m
+[32m+[m[32m          responseState: 'Event resolved â€” no further action'[m
+         });[m
+[31m-        setResponseState('resolved', ['Incident archived — no further action required']);[m
+[32m+[m[32m        setResponseState('resolved', ['Incident archived â€” no further action required']);[m
+         for (const r of RESPONDERS) setResponderState(r.id, 'resolved');[m
+         setCorroboration(CORROBORATION.entries, {[m
+           ...CORROBORATION.result,[m
+[36m@@ -450,8 +450,8 @@[m [mexport function createDemo(ctx) {[m
+         });[m
+         addTimelineEvent({[m
+           kind: 'resolved',[m
+[31m-          title: 'Event resolved — Guardian Score returning to baseline.',[m
+[31m-          facts: [fact('Score', '3.3 → 1.8'), fact('Status', 'Resolved')][m
+[32m+[m[32m          title: 'Event resolved â€” Guardian Score returning to baseline.',[m
+[32m+[m[32m          facts: [fact('Score', '3.3 â†’ 1.8'), fact('Status', 'Resolved')][m
+         });[m
+       }[m
+     },[m
+[36m@@ -462,7 +462,7 @@[m [mexport function createDemo(ctx) {[m
+         setGuardianScore(1.1);[m
+         addTimelineEvent({[m
+           kind: 'system',[m
+[31m-          title: 'Monitoring resumed — all mesh nodes clear.',[m
+[32m+[m[32m          title: 'Monitoring resumed â€” all mesh nodes clear.',[m
+           facts: [fact('Nodes', '6 / 6 online')][m
+         });[m
+       }[m
+[36m@@ -550,3 +550,4 @@[m [mexport function createDemo(ctx) {[m
+ }[m
+ [m
+ export { guardianState };[m
+[41m+[m

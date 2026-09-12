@@ -1,5 +1,5 @@
-/**
- * GuardianMesh — system header status rail.
+﻿/**
+ * GuardianMesh â€” system header status rail.
  */
 
 import { $, el } from './util.js';
@@ -26,7 +26,7 @@ export function createSystemHeader() {
     const activeIncidents = state.incidents.filter((i) => i.status !== 'resolved').length;
     const criticalIncidents = state.incidents.filter((i) => i.status === 'critical').length;
     const backendStatus = { connected: 'online', reconnecting: 'observing', disconnected: 'offline' }[state.backendStatus] || 'offline';
-    const backendLabel = { connected: 'Connected', reconnecting: 'Reconnecting', disconnected: 'Offline' }[state.backendStatus] || 'Offline';
+    const backendLabel = { connected: 'Connected', reconnecting: 'Reconnecting', disconnected: 'Unavailable' }[state.backendStatus] || 'Unavailable';
 
     rail.replaceChildren(
       stat('System', state.systemStatus === 'online' ? 'Online' : 'Degraded',
@@ -47,3 +47,5 @@ export function createSystemHeader() {
 
   return { render };
 }
+
+
