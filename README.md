@@ -3,7 +3,7 @@
 Privacy-first early warning for observable distress patterns in physical spaces.
 This repository is split by team ownership:
 
-- `ai_cv/` - camera capture, pose tracking, temporal features, event classification, and the normalized frontend event adapter.
+- Repository root (`guardian_mesh_inference.py`, `pose_tracker.py`, `temporal_features.py`, `event_classifier.py`) - camera capture, pose tracking, temporal features, event classification, and the normalized frontend event adapter.
 - `backend/` - FastAPI event ingestion, protected WebSocket streaming, and incident storage.
 - `frontend/` - command-center UI owned by the frontend team when merged.
 
@@ -167,33 +167,44 @@ python3.9 -m pip install --only-binary=:all: fastapi==0.115.6 uvicorn==0.34.0 sq
 
 ## Run the backend
 
+From the repository root (port 8001 is what `frontend/js/config.js` uses for local development):
+
 ```powershell
-$env:GUARDIANMESH_ACCESS_TOKEN = "use-a-long-random-token"
-python3.9 -m uvicorn backend.backend_server:app --host 127.0.0.1 --port 8000
+$env:GUARDIANMESH_ACCESS_TOKEN = "use-a-long-random-token"            # optional
+$env:GUARDIANMESH_CAMERAS_FILE = "backend\cameras.json"                # optional, see below
+$env:GUARDIANMESH_TRUSTED_RESPONDERS_FILE = "backend\trusted_responders.json"  # optional
+$env:GOOGLE_MAPS_API_KEY = "..."                                        # optional
+python -m uvicorn backend_server:app --host 127.0.0.1 --port 8001
 ```
 
-`/health` and `/api/status` expose service status. Event data requires `Authorization: Bearer <token>` when the token is configured. The WebSocket endpoint is `/ws/events?token=<token>`.
+`/health` and `/api/status` expose service status. When a token is configured, event data requires `Authorization: Bearer <token>` and the WebSocket endpoint is `/ws/all?token=<token>` (`all` receives every camera; any other client ID receives only that camera's events).
+
+### Camera locations
+
+Incidents, WebSocket events and `/api/cameras` carry `location`, `lat` and `lng` for the camera that produced them. Coordinates come from the event itself when the CV client sends them (`--lat/--lng`), otherwise from the camera registry: copy `backend/cameras.example.json` to `backend/cameras.json` and point `GUARDIANMESH_CAMERAS_FILE` at it. Camera IDs match regardless of spelling (`cam_02` = `CAM-02`). These coordinates drive the dashboard's Nearby Response lookup; they describe where a camera is mounted, never where a person is.
+
+Existing SQLite databases are upgraded automatically on startup (the `location`, `lat` and `lng` columns are added if missing).
 
 ## Run camera inference
 
-With a visible local camera window:
+With a visible local camera window, from the repository root:
 
 ```powershell
-python3.9 -m ai_cv.guardian_mesh_inference --source 0 --camera_id cam_01
+python guardian_mesh_inference.py --source 0 --camera_id cam_01
 ```
 
 Headless, metadata-only mode:
 
 ```powershell
-python3.9 -m ai_cv.guardian_mesh_inference `
+python guardian_mesh_inference.py `
   --source 0 `
   --camera_id cam_01 `
   --no_viz `
-  --api_url http://127.0.0.1:8000 `
+  --api_url http://127.0.0.1:8001 `
   --api-token $env:GUARDIANMESH_ACCESS_TOKEN
 ```
 
-Press `q` to stop visible mode. Recording is disabled unless `--allow-recording` is explicitly supplied.
+Add `--lat 47.6 --lng -122.3 --location "Main Corridor"` to send camera coordinates with each event instead of relying on the registry. Press `q` to stop visible mode. Recording is disabled unless `--allow-recording` is explicitly supplied.
 
 ## Frontend contract
 
@@ -215,27 +226,20 @@ normalises, including every accepted WebSocket frame type, is documented in
 
 ### Wiring the frontend to this backend
 
-The backend listens on `127.0.0.1:8000` while the frontend is served separately,
-so point the frontend at it explicitly in `frontend/js/config.js`:
+No edits needed. `frontend/js/config.js` sends a frontend served from `localhost`/`127.0.0.1` (e.g. `npm start` on :8080) to `http://127.0.0.1:8001`; everywhere else it uses the same origin, which on Cloudflare is `worker.js`.
 
-```js
-BACKEND_ENABLED: true,
-API_BASE: 'http://127.0.0.1:8000/api',
-```
+- **Backend events** — the dashboard translates backend `{type: "event", data}` messages into one incident per camera + anonymous track: `POSSIBLE_FALL`/`VERIFYING` show as *warning*, `DISTRESS_EVENT` as *critical*, and a return to `NORMAL` resolves the incident.
+- **CORS** — `GUARDIANMESH_ALLOWED_ORIGINS` defaults to `:8080` and `:5500` on localhost/127.0.0.1.
+- **Token** — set `CONFIG.ACCESS_TOKEN` to match `GUARDIANMESH_ACCESS_TOKEN`; REST calls send it as a bearer header and the socket as `?token=`.
 
-Paths already line up: the frontend probes `GET /api/status` and opens
-`/ws/events`, both of which this backend serves. Two things still to check:
+### Cloudflare deployment
 
-- **CORS** — `GUARDIANMESH_ALLOWED_ORIGINS` defaults to `:5500`. Add whatever
-  origin serves the frontend (`http://localhost:8080` for `npm start`).
-- **Token** — when `GUARDIANMESH_ACCESS_TOKEN` is set, REST needs
-  `Authorization: Bearer <token>` and the socket needs `/ws/events?token=<token>`.
-  The frontend client does not send either yet.
+`worker.js` serves `frontend/` and edge fallbacks for `/api/status`, `/api/nearby-help`, `/api/score`, `/api/cameras` and `/ws/*`. Set `BACKEND_ORIGIN` to forward API/WebSocket traffic to a hosted FastAPI backend (falls back to the edge handlers if it is unreachable or returns 5xx). Secrets: `GOOGLE_MAPS_API_KEY`, `TRUSTED_RESPONDERS_JSON`, `CAMERAS_JSON` (same shapes as the example files in `backend/`). Deploy with `deploy_guardianmesh.ps1`.
 
 ## Validation
 
 ```powershell
-python3.9 -m py_compile ai_cv/*.py backend/*.py
+python -m py_compile backend_server.py guardian_mesh_inference.py event_classifier.py pose_tracker.py temporal_features.py evaluate_pipeline.py backend/*.py
 ```
 
-Run the camera against a short video file with `--no_viz --max_frames 120` when a webcam is unavailable. The evaluator in `ai_cv/evaluate_pipeline.py` is for labeled datasets and is separate from the live path.
+Run the camera against a short video file with `--no_viz --max_frames 120` when a webcam is unavailable. The evaluator in `evaluate_pipeline.py` is for labeled datasets and is separate from the live path.

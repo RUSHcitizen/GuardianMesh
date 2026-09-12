@@ -1,0 +1,16 @@
+[
+  {
+    "id": "cam_01",
+    "label": "CAM 01",
+    "location": "Main Hall",
+    "lat": 47.0005,
+    "lng": -122.0004
+  },
+  {
+    "id": "cam_02",
+    "label": "CAM 02",
+    "location": "Main Corridor",
+    "lat": 47.0002,
+    "lng": -122.0001
+  }
+]

@@ -1,4 +1,4 @@
-﻿name = "guardianmesh"
+name = "guardianmesh"
 main = "worker.js"
 compatibility_date = "2026-09-12"
 
@@ -6,3 +6,11 @@ compatibility_date = "2026-09-12"
 directory = "./frontend"
 binding = "ASSETS"
 run_worker_first = ["/api/*", "/health", "/ws/*"]
+
+[[durable_objects.bindings]]
+name = "LEADERBOARD"
+class_name = "Leaderboard"
+
+[[migrations]]
+tag = "v1-leaderboard"
+new_sqlite_classes = ["Leaderboard"]

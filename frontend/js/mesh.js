@@ -1,5 +1,5 @@
-﻿/**
- * GuardianMesh â€” mesh panel: camera/sensor nodes, cross-sensor corroboration
+/**
+ * GuardianMesh — mesh panel: camera/sensor nodes, cross-sensor corroboration
  * and anonymous cross-camera handoff.
  *
  * The mesh is what separates GuardianMesh from a single-camera fall detector:
@@ -63,7 +63,7 @@ export function createMeshPanel() {
     const all = [...state.cameras, ...state.sensors];
     const online = all.filter((n) => n.online !== false).length;
     const alerting = state.cameras.filter((c) => c.status === 'critical' || c.status === 'warning').length;
-    summary.textContent = `${all.length} nodes Â· ${online} online${alerting ? ` Â· ${alerting} alerting` : ''}`;
+    summary.textContent = `${all.length} nodes · ${online} online${alerting ? ` · ${alerting} alerting` : ''}`;
   }
 
   function renderCorroboration(state) {
@@ -106,9 +106,9 @@ export function createMeshPanel() {
     }
     handoff.replaceChildren(
       el('b', { text: h.from }),
-      el('span', { class: 'handoff__arrow', text: 'â†’' }),
+      el('span', { class: 'handoff__arrow', text: '→' }),
       el('b', { text: h.trackingId }),
-      el('span', { class: 'handoff__arrow', text: 'â†’' }),
+      el('span', { class: 'handoff__arrow', text: '→' }),
       el('b', { text: h.to }),
       el('span', { text: h.note }),
       el('span', { class: 'handoff__tag', text: 'Anonymous handoff' })

@@ -1,5 +1,5 @@
-﻿/**
- * GuardianMesh â€” AI reasoning timeline.
+/**
+ * GuardianMesh — AI reasoning timeline.
  *
  * The visual proof that GuardianMesh reasons ACROSS TIME rather than
  * classifying a single frame. Entries are appended, never rewritten, and new

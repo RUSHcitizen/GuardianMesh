@@ -1,5 +1,5 @@
-﻿/**
- * GuardianMesh â€” AR pose overlay.
+/**
+ * GuardianMesh — AR pose overlay.
  *
  * Draws anonymous tracking graphics on a canvas above the camera stage:
  * bounding box, skeleton, tracking label, confidence, Guardian Score and a
@@ -93,7 +93,7 @@ export function createPoseOverlay(canvas) {
     ctx.strokeStyle = rgba(color, 0.95);
     ctx.lineWidth = 1.8;
     ctx.beginPath();
-    // four corner brackets â€” thin and professional, never a heavy frame
+    // four corner brackets — thin and professional, never a heavy frame
     ctx.moveTo(x, y + corner); ctx.lineTo(x, y); ctx.lineTo(x + corner, y);
     ctx.moveTo(x + w - corner, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + corner);
     ctx.moveTo(x + w, y + h - corner); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w - corner, y + h);
@@ -151,7 +151,7 @@ export function createPoseOverlay(canvas) {
       return ctx.measureText(l.text).width;
     });
     ctx.font = '600 10px ui-monospace, Menlo, monospace';
-    const statsText = stats.join('  Â·  ');
+    const statsText = stats.join('  ·  ');
     const statsWidth = statsText ? ctx.measureText(statsText).width : 0;
 
     const padX = 6;

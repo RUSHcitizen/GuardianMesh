@@ -1,5 +1,5 @@
-﻿/**
- * GuardianMesh â€” pose & temporal-feature engine.
+/**
+ * GuardianMesh — pose & temporal-feature engine.
  *
  * Holds one record per anonymous track, interpolates between canonical body
  * poses, and derives the temporal movement features the reasoning layer uses:
@@ -8,14 +8,14 @@
  *
  * It is a *simulation source* for Demo Mode. In live mode the CV service
  * supplies keypoints directly via `applyExternalTrack()`, and the same feature
- * derivation runs on top â€” so the UI behaves identically either way.
+ * derivation runs on top — so the UI behaves identically either way.
  */
 
 import { POSES, BODY_STATES, KEYPOINT_NAMES } from '../data/pose-library.js';
 import { CONFIG } from './config.js';
 import { clamp, easeInOut, lerp } from './util.js';
 
-const GROUND_PIVOT = 0.86;    // y of the standing pose's feet â€” scale pivot
+const GROUND_PIVOT = 0.86;    // y of the standing pose's feet — scale pivot
 const MOTION_SMOOTHING = 0.18;
 
 const clonePose = (p) => {

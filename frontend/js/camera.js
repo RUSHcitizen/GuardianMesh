@@ -1,11 +1,11 @@
-﻿/**
- * GuardianMesh â€” camera stage controller.
+/**
+ * GuardianMesh — camera stage controller.
  *
  * Owns the three stacked layers of the hero panel:
- *   scene canvas  (simulated feed)  â†’  <video> (webcam / file)  â†’  overlay canvas
+ *   scene canvas  (simulated feed)  →  <video> (webcam / file)  →  overlay canvas
  *
  * Source priority: an explicit file/webcam choice, then CONFIG.VIDEO_SOURCE_URL,
- * then the deterministic simulated scene. The overlay is source-agnostic â€” it
+ * then the deterministic simulated scene. The overlay is source-agnostic — it
  * always draws the current tracks, so swapping the feed never touches the
  * tracking code.
  */
@@ -93,7 +93,7 @@ export function createCamera(refs) {
       return false;
     }
     try {
-      showStageState('Waiting for camera', 'Requesting capture permissionâ€¦');
+      showStageState('Waiting for camera', 'Requesting capture permission…');
       const next = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false

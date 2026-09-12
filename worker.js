@@ -1,4 +1,4 @@
-﻿const JSON_HEADERS = {
+const JSON_HEADERS = {
   'content-type': 'application/json; charset=utf-8',
   'cache-control': 'no-store'
 };
@@ -17,6 +17,8 @@ const MEDICAL_TYPES = [
   'pharmacy'
 ];
 
+import { DurableObject } from 'cloudflare:workers';
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -27,7 +29,11 @@ export default {
     if (env.BACKEND_ORIGIN && (path.startsWith('/api/') || path === '/health' || path.startsWith('/ws/'))) {
       try {
         const target = new URL(path + url.search, env.BACKEND_ORIGIN.replace(/\/$/, '') + '/');
-        return await fetch(new Request(target.toString(), request));
+        // clone() so a POST body is still readable if we fall back below
+        const upstream = await fetch(new Request(target.toString(), request.clone()));
+        // A stopped tunnel/host answers 5xx rather than throwing; treat that as unavailable too.
+        if (upstream.status < 500) return upstream;
+        console.warn('GuardianMesh upstream returned', upstream.status, '- using edge fallback');
       } catch (err) {
         console.warn('GuardianMesh upstream unavailable; using edge fallback:', String(err));
       }
@@ -63,10 +69,18 @@ export default {
       return scoreRequest(request);
     }
 
+    if ((path === '/api/leaderboard' && request.method === 'GET')
+      || (path === '/api/rescues' && request.method === 'POST')) {
+      if (!env.LEADERBOARD) return json({ detail: 'Leaderboard storage not configured' }, 503);
+      const stub = env.LEADERBOARD.get(env.LEADERBOARD.idFromName('global'));
+      return stub.fetch(request);
+    }
+
     // Small edge fallbacks keep the dashboard API-shaped even when FastAPI is
     // not publicly hosted yet.
     if (path === '/api/cameras' && request.method === 'GET') {
-      return json({ cameras: [] });
+      const cameras = registryCameras(env);
+      return json({ cameras, total: cameras.length });
     }
 
     if (path === '/api/incidents' && request.method === 'GET') {
@@ -264,7 +278,7 @@ function trustedResources(env, lat, lng, limit) {
     .filter(r =>
       r &&
       r.trusted === true &&
-      r.available !== false &&
+      r.available === true &&
       TRUSTED_CATEGORIES.has(r.category)
     )
     .map(r => {
@@ -302,6 +316,36 @@ function trustedResources(env, lat, lng, limit) {
   return result;
 }
 
+/**
+ * Camera registry from the CAMERAS_JSON secret/var: same shape as
+ * backend/cameras.example.json. Coordinates are camera mounting points.
+ */
+function registryCameras(env) {
+  let records = [];
+  try {
+    records = JSON.parse(env.CAMERAS_JSON || '[]');
+  } catch {
+    records = [];
+  }
+  return (Array.isArray(records) ? records : [])
+    .filter(r => r && r.id)
+    .map(r => {
+      const lat = Number(r.lat);
+      const lng = Number(r.lng);
+      const valid = r.lat != null && r.lng != null && Number.isFinite(lat) && Number.isFinite(lng)
+        && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+      return {
+        id: String(r.id),
+        camera_id: String(r.id),
+        label: r.label ? String(r.label) : String(r.id),
+        location: r.location ? String(r.location) : null,
+        lat: valid ? lat : null,
+        lng: valid ? lng : null,
+        is_active: false
+      };
+    });
+}
+
 function haversine(lat1, lng1, lat2, lng2) {
   const toRad = deg => deg * Math.PI / 180;
   const earthRadiusM = 6371000;
@@ -321,4 +365,86 @@ function clamp01(value) {
 
 function round3(value) {
   return Math.round(value * 1000) / 1000;
+}
+
+/* ---------------------------------------------------------------------------
+   Rescue leaderboard — edge persistence mirroring backend_server.py
+   GET /api/leaderboard, POST /api/rescues (idempotent per rescue_key+responder)
+   --------------------------------------------------------------------------- */
+
+const RESCUE_KEY_RE = /^[A-Za-z0-9_.:@-]{1,120}$/;
+const RESPONDER_ID_RE = /^[A-Za-z0-9_-]{1,40}$/;
+
+export class Leaderboard extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.sql = ctx.storage.sql;
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS rescues (
+      id TEXT PRIMARY KEY,
+      rescue_key TEXT NOT NULL,
+      incident_id TEXT NOT NULL,
+      responder_id TEXT NOT NULL,
+      responder_name TEXT,
+      camera_id TEXT,
+      source TEXT,
+      created_at TEXT NOT NULL
+    )`);
+  }
+
+  async fetch(request) {
+    const url = new URL(request.url);
+    if (request.method === 'GET') {
+      const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit')) || 20));
+      return json(this.snapshot(limit));
+    }
+
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ detail: 'Invalid JSON body' }, 400);
+    }
+    const error = validateRescue(body);
+    if (error) return json({ detail: error }, 422);
+
+    const now = new Date().toISOString();
+    const credited = [];
+    for (const r of body.responders) {
+      const cursor = this.sql.exec(
+        `INSERT OR IGNORE INTO rescues
+           (id, rescue_key, incident_id, responder_id, responder_name, camera_id, source, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `${body.rescue_key}|${r.id}`, body.rescue_key, body.incident_id, r.id,
+        r.name ? String(r.name).slice(0, 60) : null,
+        body.camera_id ? String(body.camera_id).slice(0, 60) : null,
+        body.source === 'demo' ? 'demo' : 'live', now
+      );
+      if (cursor.rowsWritten > 0) credited.push(r.id);
+    }
+    return json({ status: 'recorded', credited, leaderboard: this.snapshot(20) });
+  }
+
+  snapshot(limit) {
+    const responders = this.sql.exec(
+      `SELECT responder_id AS id, MAX(responder_name) AS name, COUNT(*) AS rescues,
+              MAX(created_at) AS last_rescue_at
+         FROM rescues GROUP BY responder_id
+        ORDER BY rescues DESC, responder_id ASC LIMIT ?`, limit
+    ).toArray().map((row) => ({ ...row, name: row.name || row.id }));
+    const total = this.sql.exec('SELECT COUNT(DISTINCT rescue_key) AS n FROM rescues').one().n;
+    return { responders, total_rescues: total, generated_at: new Date().toISOString() };
+  }
+}
+
+function validateRescue(body) {
+  if (!body || typeof body !== 'object') return 'Body must be an object';
+  if (!RESCUE_KEY_RE.test(String(body.rescue_key || ''))) return 'Invalid rescue_key';
+  if (!RESCUE_KEY_RE.test(String(body.incident_id || ''))) return 'Invalid incident_id';
+  if (!Array.isArray(body.responders) || body.responders.length < 1 || body.responders.length > 10) {
+    return 'responders must contain 1-10 entries';
+  }
+  for (const r of body.responders) {
+    if (!r || !RESPONDER_ID_RE.test(String(r.id || ''))) return 'Invalid responder id';
+  }
+  return null;
 }

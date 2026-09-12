@@ -1,5 +1,5 @@
-﻿/**
- * GuardianMesh â€” shared application state.
+/**
+ * GuardianMesh — shared application state.
  *
  * One plain object plus a tiny publish/subscribe layer. No state library.
  * Every producer (Demo Mode, WebSocket, REST) mutates state through the
@@ -51,7 +51,10 @@ export const guardianState = {
   recommendations: [],
   corroboration: [],
   corroborationResult: null,
-  handoff: null
+  handoff: null,
+
+  // gamification — shared rescue leaderboard from the backend (null until loaded)
+  leaderboard: null
 };
 
 /* ---------------------------------------------------------------------------
@@ -86,7 +89,7 @@ export function update(patch) {
 export const touched = (changed, ...keys) => keys.some((k) => changed.includes(k));
 
 /* ---------------------------------------------------------------------------
-   Actions â€” the single vocabulary shared by Demo Mode and the live backend
+   Actions — the single vocabulary shared by Demo Mode and the live backend
    --------------------------------------------------------------------------- */
 
 export function setSystem(patch) {
@@ -209,6 +212,11 @@ export function setCorroboration(entries, result) {
 
 export function setHandoff(handoff) {
   update({ handoff: handoff || null });
+}
+
+export function setLeaderboard(leaderboard) {
+  if (!leaderboard || !Array.isArray(leaderboard.responders)) return;
+  update({ leaderboard });
 }
 
 /** Snapshot used for debugging in the console: window.guardian.snapshot() */

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * GuardianMesh runtime configuration.
  * Local frontend development talks to FastAPI on :8001.
  * Production uses same-origin Cloudflare Worker API/WebSocket routes.

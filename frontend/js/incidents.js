@@ -1,5 +1,5 @@
-﻿/**
- * GuardianMesh â€” incident feed.
+/**
+ * GuardianMesh — incident feed.
  *
  * Incident cards are rendered from data; nothing is hard-coded in HTML.
  * Filters are presentation-only and never mutate the incident list.
@@ -73,7 +73,7 @@ export function createIncidentFeed() {
         el('span', {}, ['Track ', el('b', { text: incident.trackingId })]),
         el('span', {}, ['Camera ', el('b', { text: incident.cameraId })]),
         el('span', { text: incident.location }),
-        el('span', {}, ['at ', el('b', { text: incident.timestamp || 'â€”' })])
+        el('span', {}, ['at ', el('b', { text: incident.timestamp || '—' })])
       ]),
       el('div', { class: 'incident__metrics' }, [
         metric('Confidence', `${Math.round((incident.confidence || 0) * 100)}%`, 'tracking'),
@@ -84,7 +84,7 @@ export function createIncidentFeed() {
       el('div', { class: 'incident__status', dataset: { status: incident.status } }, [
         el('span', { class: 'dot' }),
         el('span', { class: 'label', text: 'Status' }),
-        el('strong', { text: incident.responseState || 'â€”' })
+        el('strong', { text: incident.responseState || '—' })
       ])
     ]);
   }

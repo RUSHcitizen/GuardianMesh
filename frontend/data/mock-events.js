@@ -1,5 +1,5 @@
-﻿/**
- * GuardianMesh â€” single source of truth for demo/mock data.
+/**
+ * GuardianMesh — single source of truth for demo/mock data.
  *
  * Nothing outside this file should hard-code camera names, responder labels,
  * event copy, or incident values. Swap this file for backend data and the UI
@@ -69,7 +69,7 @@ export const RECOMMENDATIONS = {
   ],
   critical: [
     'Alert designated responder',
-    'Display incident location â€” School Gym, Camera 03 sightline',
+    'Display incident location — School Gym, Camera 03 sightline',
     'Continue monitoring person P-02',
     'Open live incident view for responder review',
     'Provide on-site emergency-resource information'

@@ -1,5 +1,5 @@
-﻿/**
- * GuardianMesh â€” application bootstrap.
+/**
+ * GuardianMesh — application bootstrap.
  *
  * Wires the perception layer (pose engine + camera stage), the reasoning
  * readouts (Guardian Score, timeline), and the operational panels (incidents,
@@ -17,6 +17,7 @@ import { createResponsePanel } from './response.js';
 import { createScorePanel } from './guardian-score.js';
 import { createSystemHeader } from './system-header.js';
 import { createTimeline } from './timeline.js';
+import { createGamification } from './gamification.js';
 import {
   clearTimeline, guardianState, setAssessment, setTrackedPeople, snapshot,
   subscribe, touched, update
@@ -45,11 +46,12 @@ const panels = {
   response: createResponsePanel()
 };
 
+const game = createGamification();
 const dataSource = createDataSource({ engine });
 const demo = createDemo({ engine, camera });
 
 /* -------------------------------------------------------------------------
-   State â†’ UI routing
+   State → UI routing
    Each renderer runs only when the state it depends on actually changed.
    ------------------------------------------------------------------------- */
 
@@ -133,7 +135,7 @@ function renderFeatures(people) {
   if (!focus) {
     setFeature(featureEls.vvel, '0.00', 'u/s');
     setFeature(featureEls.motion, '0.00');
-    setFeature(featureEls.angle, '0', 'Â°');
+    setFeature(featureEls.angle, '0', '°');
     setFeature(featureEls.ground, '0.0', 's');
     setFeature(featureEls.immobility, '0.0', 's');
     return;
@@ -146,7 +148,7 @@ function renderFeatures(people) {
   setFeature(featureEls.vvel, vvel.toFixed(2), 'u/s', dropping ? 'critical' : null);
   setFeature(featureEls.motion, f.motionMagnitude.toFixed(3), '',
     f.motionMagnitude < 0.035 ? 'warning' : null);
-  setFeature(featureEls.angle, Math.round(f.bodyAngle).toString(), 'Â°',
+  setFeature(featureEls.angle, Math.round(f.bodyAngle).toString(), '°',
     f.bodyAngle > 45 ? 'warning' : null);
   setFeature(featureEls.ground, (f.groundDurationMs / 1000).toFixed(1), 's',
     f.groundDurationMs > 3000 ? 'warning' : null);
@@ -297,7 +299,7 @@ dataSource.connect();
 
 // Small console surface for debugging during the hackathon.
 window.guardian = {
-  snapshot, demo, engine, camera, dataSource,
+  snapshot, demo, engine, camera, dataSource, game,
   emit: (payload) => dataSource.handleGuardianEvent(payload),
   score: (v) => update({ previousScore: guardianState.guardianScore, guardianScore: round(v, 1) }),
   /** Attach a live backend without editing config.js. */
@@ -306,5 +308,5 @@ window.guardian = {
 };
 window.__GUARDIAN_BOOTED__ = true;
 console.info('%c GuardianMesh ', 'background:#55c8ec;color:#071018;font-weight:700',
-  'command center ready â€” press D to start the demo, R to reset, N to step.');
+  'command center ready — press D to start the demo, R to reset, N to step.');
 

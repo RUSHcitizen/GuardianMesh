@@ -1,5 +1,5 @@
-﻿/**
- * GuardianMesh â€” system header status rail.
+/**
+ * GuardianMesh — system header status rail.
  */
 
 import { $, el } from './util.js';

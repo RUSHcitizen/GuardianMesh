@@ -1,4 +1,4 @@
-﻿/** Small DOM + math helpers. Intentionally dependency-free. */
+/** Small DOM + math helpers. Intentionally dependency-free. */
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -10,7 +10,7 @@ export const round = (v, places = 2) => {
   return Math.round(v * f) / f;
 };
 
-/** Cubic ease-in-out â€” used for pose interpolation and value animation. */
+/** Cubic ease-in-out — used for pose interpolation and value animation. */
 export const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
 /** Create an element with attributes, dataset, and children in one call. */

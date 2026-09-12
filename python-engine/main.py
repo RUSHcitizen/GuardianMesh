@@ -1,14 +1,17 @@
 from fastapi import FastAPI
+from typing import Optional
+
 from pydantic import BaseModel
 
 app = FastAPI()
 
 class ScoreRequest(BaseModel):
-    camera_id: str
+    # Same request shape as backend_server.py's /api/score
+    camera_id: Optional[str] = None
     fall_score: float
     immobility_score: float
     tracking_confidence: float
-    persistence_seconds: float
+    persistence_seconds: float = 0.0
 
 @app.get('/health')
 def health():

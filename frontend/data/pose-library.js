@@ -1,5 +1,5 @@
-﻿/**
- * GuardianMesh â€” pose library.
+/**
+ * GuardianMesh — pose library.
  *
  * Canonical body poses expressed as COCO-17 keypoints in NORMALISED frame
  * coordinates (0..1, origin top-left). A track places a pose by applying an
@@ -72,7 +72,7 @@ export const POSES = {
     ['left_ankle', 0.450, 0.846], ['right_ankle', 0.548, 0.836]
   ]),
 
-  /** Abrupt change in movement pattern â€” torso pitches forward, knees buckle. */
+  /** Abrupt change in movement pattern — torso pitches forward, knees buckle. */
   stumble: pose([
     ['nose', 0.548, 0.392], ['left_eye', 0.540, 0.386], ['right_eye', 0.558, 0.388],
     ['left_ear', 0.528, 0.393], ['right_ear', 0.564, 0.396],
@@ -84,7 +84,7 @@ export const POSES = {
     ['left_ankle', 0.462, 0.852], ['right_ankle', 0.520, 0.856]
   ]),
 
-  /** Rapid vertical displacement â€” body mid-descent, orientation changing. */
+  /** Rapid vertical displacement — body mid-descent, orientation changing. */
   falling: pose([
     ['nose', 0.612, 0.560], ['left_eye', 0.606, 0.552], ['right_eye', 0.620, 0.556],
     ['left_ear', 0.596, 0.556], ['right_ear', 0.624, 0.566],
@@ -96,7 +96,7 @@ export const POSES = {
     ['left_ankle', 0.410, 0.824], ['right_ankle', 0.428, 0.812]
   ]),
 
-  /** Ground-level pose â€” abnormal body orientation, person on the ground. */
+  /** Ground-level pose — abnormal body orientation, person on the ground. */
   ground: pose([
     ['nose', 0.648, 0.786], ['left_eye', 0.641, 0.780], ['right_eye', 0.652, 0.782],
     ['left_ear', 0.630, 0.784], ['right_ear', 0.658, 0.788],
@@ -108,7 +108,7 @@ export const POSES = {
     ['left_ankle', 0.378, 0.840], ['right_ankle', 0.388, 0.812]
   ]),
 
-  /** Movement resumed â€” propped on an elbow. */
+  /** Movement resumed — propped on an elbow. */
   recovering: pose([
     ['nose', 0.640, 0.700], ['left_eye', 0.634, 0.694], ['right_eye', 0.646, 0.696],
     ['left_ear', 0.624, 0.700], ['right_ear', 0.652, 0.704],
@@ -120,7 +120,7 @@ export const POSES = {
     ['left_ankle', 0.392, 0.836], ['right_ankle', 0.400, 0.812]
   ]),
 
-  /** Seated and stable â€” used when an event resolves. */
+  /** Seated and stable — used when an event resolves. */
   seated: pose([
     ['nose', 0.562, 0.600], ['left_eye', 0.554, 0.594], ['right_eye', 0.570, 0.594],
     ['left_ear', 0.546, 0.600], ['right_ear', 0.578, 0.602],

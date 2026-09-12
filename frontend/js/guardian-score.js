@@ -1,5 +1,5 @@
-﻿/**
- * GuardianMesh â€” Guardian Score panel.
+/**
+ * GuardianMesh — Guardian Score panel.
  *
  * The Guardian Score answers "how concerning does this situation look?".
  * AI Confidence answers "how certain is the classification?". They are
@@ -17,7 +17,7 @@ export function bandFor(score) {
 /**
  * Live severity model used when the frontend derives its own score from
  * temporal features (no backend score present). Deliberately additive and
- * explainable â€” each term maps to an observable behaviour, not a diagnosis.
+ * explainable — each term maps to an observable behaviour, not a diagnosis.
  *
  * @param {{verticalVelocity:number, motionMagnitude:number, bodyAngle:number,
  *          groundDurationMs:number, timeSinceMovementMs:number}} f
@@ -38,7 +38,7 @@ export function computeGuardianScore(f) {
   score += clamp((f.groundDurationMs || 0) / 12000, 0, 1) * 2.2;
 
   // sustained minimal movement, weighted by how long the person has been at
-  // ground level â€” standing still is not the same signal as lying still
+  // ground level — standing still is not the same signal as lying still
   const groundFactor = clamp((f.groundDurationMs || 0) / 2000, 0, 1);
   score += clamp((f.timeSinceMovementMs || 0) / 16000, 0, 1) * 2.8 * groundFactor;
 
@@ -108,7 +108,7 @@ export function createScorePanel() {
     const delta = round(state.guardianScore - state.previousScore, 1);
     if (Math.abs(delta) >= 0.1) {
       deltaEl.dataset.dir = delta > 0 ? 'up' : 'down';
-      deltaEl.textContent = `${delta > 0 ? 'â–²' : 'â–¼'} ${delta > 0 ? '+' : ''}${delta.toFixed(1)} Â· ${state.previousScore.toFixed(1)} â†’ ${state.guardianScore.toFixed(1)}`;
+      deltaEl.textContent = `${delta > 0 ? '▲' : '▼'} ${delta > 0 ? '+' : ''}${delta.toFixed(1)} · ${state.previousScore.toFixed(1)} → ${state.guardianScore.toFixed(1)}`;
     } else if (state.guardianScore === 0) {
       deltaEl.dataset.dir = 'flat';
       deltaEl.textContent = '';
@@ -120,18 +120,18 @@ export function createScorePanel() {
     confValue.textContent = `${confPct}%`;
     confFill.style.width = `${confPct}%`;
     confNote.textContent = state.confidence > 0
-      ? `Certainty that the observed pattern is â€œ${state.eventLabel}â€.`
+      ? `Certainty that the observed pattern is “${state.eventLabel}”.`
       : 'Classification certainty for the current pattern.';
 
     roEvent.textContent = state.eventLabel || 'None';
     roEvent.dataset.status = state.eventType === 'normal' ? 'normal' : bandFor(state.guardianScore).key;
-    roPerson.textContent = state.focusPersonId || 'â€”';
+    roPerson.textContent = state.focusPersonId || '—';
     roImmobility.textContent = formatSeconds(state.immobilitySeconds);
     roMotion.textContent = state.motionState;
     roMotion.dataset.status = state.motionState === 'Minimal' ? 'warning' : 'normal';
   }
 
-  /** Frame tick â€” eases the displayed number and the gauge sweep. */
+  /** Frame tick — eases the displayed number and the gauge sweep. */
   function tick(dtMs) {
     if (Math.abs(displayed - target) < 0.005) {
       displayed = target;

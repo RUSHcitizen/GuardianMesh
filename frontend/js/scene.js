@@ -1,5 +1,5 @@
-﻿/**
- * GuardianMesh â€” simulated camera scene.
+/**
+ * GuardianMesh — simulated camera scene.
  *
  * Renders a deterministic stand-in for CCTV footage: a corridor, ambient
  * lighting and anonymous human silhouettes drawn from the SAME normalised
@@ -189,7 +189,7 @@ export function createScene(canvas) {
     ctx.strokeStyle = body;
     ctx.stroke();
 
-    // head â€” a plain silhouette; no facial detail is rendered or required
+    // head — a plain silhouette; no facial detail is rendered or required
     const headR = Math.max(0.036 * height * scale, 4);
     const neckX = (px(kp.left_shoulder) + px(kp.right_shoulder)) / 2;
     const neckY = (py(kp.left_shoulder) + py(kp.right_shoulder)) / 2;

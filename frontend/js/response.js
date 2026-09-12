@@ -1,5 +1,5 @@
-﻿/**
- * GuardianMesh â€” response mesh (simulated).
+/**
+ * GuardianMesh — response mesh (simulated).
  *
  * Activates responder nodes and surfaces recommended actions when concern
  * becomes elevated. The workflow itself is simulated; the one live call is the
@@ -8,7 +8,6 @@
  */
 
 import { $, el, show } from './util.js';
-import { createNearbyResponsePanel } from './nearby-response.js';
 import { coordinatesOf, fetchNearbyHelp } from './datasource.js';
 
 const WORKFLOW_LABELS = {
@@ -82,7 +81,6 @@ function safeMapsUrl(url) {
 }
 
 export function createResponsePanel() {
-  createNearbyResponsePanel();
   const stateEl = $('#response-state');
   const stateValue = $('#response-state-value');
   const list = $('#responder-list');
@@ -288,7 +286,7 @@ export function createResponsePanel() {
     if (changed) {
       recList.replaceChildren(...recs.map((text) =>
         el('div', { class: 'rec-item rec-item--enter' }, [
-          el('span', { class: 'rec-item__mark', text: 'â–¸' }),
+          el('span', { class: 'rec-item__mark', text: '▸' }),
           el('span', { text })
         ])
       ));
