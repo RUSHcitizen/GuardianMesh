@@ -1,9 +1,10 @@
-node_modules/
-.DS_Store
+__pycache__/
+*.py[cod]
 *.log
+*.db
 .env
 .venv/
-__pycache__/
+node_modules/
 frontend/assets/video/*.mp4
 frontend/assets/video/*.webm
 frontend/assets/video/*.mov
