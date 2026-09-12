@@ -11,6 +11,7 @@ import { createCamera } from './camera.js';
 import { CONFIG } from './config.js';
 import { createDataSource } from './datasource.js';
 import { createDemo, seedBaseline } from './demo.js';
+import { createDeviceLocation } from './device-location.js';
 import { computeGuardianScore, createScorePanel } from './guardian-score.js';
 import { createIncidentFeed } from './incidents.js';
 import { createLiveDirector } from './live-director.js';
@@ -40,9 +41,11 @@ const camera = createCamera({
   overlayCanvas: $('#pose-overlay')
 }, { allowSimulation: devSimulation });
 
+const deviceLocation = createDeviceLocation();
+
 const panels = {
   header: createSystemHeader(), score: createScorePanel(), timeline: createTimeline(),
-  incidents: createIncidentFeed(), mesh: createMeshPanel(), response: createResponsePanel()
+  incidents: createIncidentFeed(), mesh: createMeshPanel(), response: createResponsePanel({ deviceLocation })
 };
 
 const game = createGamification();
@@ -75,7 +78,9 @@ subscribe((state, changed) => {
   if (touched(changed, 'cameras', 'sensors', 'corroboration', 'corroborationResult',
     'handoff', 'activeCamera')) panels.mesh.render(state);
   if (touched(changed, 'responders', 'responseState', 'recommendations')) panels.response.render(state);
-  if (touched(changed, 'incidents', 'cameras', 'backendStatus')) panels.response.renderNearby(state);
+  if (touched(changed, 'incidents', 'cameras', 'backendStatus', 'deviceLocationStatus')) {
+    panels.response.renderNearby(state);
+  }
   if (touched(changed, 'dataSource', 'backendStatus', 'aiEngine', 'cameraStatus')) renderDataSourceFlag(state);
 });
 
@@ -352,7 +357,10 @@ function markSource(mode) {
 }
 
 function clearLocalAssessment({ stopCamera = false } = {}) {
-  if (stopCamera) camera.useOff();
+  if (stopCamera) {
+    camera.useOff();
+    deviceLocation.forget();
+  }
   poseDetector.reset();
   engine.reset();
   incidentByTrack.clear();
@@ -384,6 +392,9 @@ async function startLiveCamera() {
     clearLocalAssessment({ stopCamera: true });
     return;
   }
+  // The webcam is this device, so its location is the camera's. Ask now, inside the
+  // click, alongside the camera prompt; Nearby Response uses it if an incident occurs.
+  deviceLocation.request();
   btnStart.disabled = true;
   update({ dataSource: 'local', backendStatus: 'not_required', cameraStatus: 'starting' });
   const modelReady = await poseDetector.initialize();
@@ -434,6 +445,8 @@ sourceButtons.webcam.addEventListener('click', () => startLiveCamera());
 sourceButtons.file.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', async () => {
   if (!fileInput.files?.[0]) return;
+  // A recorded video was not filmed where this device is.
+  deviceLocation.forget();
   update({ dataSource: 'local', backendStatus: 'not_required', cameraStatus: 'starting' });
   if (!await poseDetector.initialize()) return;
   poseDetector.reset();

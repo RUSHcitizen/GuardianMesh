@@ -49,8 +49,7 @@ export const CONFIG = {
   /**
    * Where the backend lives. Locally it runs on its own port (uvicorn defaults
    * to 127.0.0.1:8000) while the frontend is served separately. Deployed pages
-   * use their own origin, where worker.js serves the API (nearby help, rescue
-   * leaderboard) — an HTTPS page could not reach an http:// localhost anyway.
+   * use their own origin, where worker.js serves the API (nearby help) — an HTTPS page could not reach an http:// localhost anyway.
    */
   BACKEND_ORIGIN: IS_LOCAL_FRONTEND ? 'http://127.0.0.1:8000' : null,
 

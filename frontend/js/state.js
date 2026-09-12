@@ -17,6 +17,7 @@ export const guardianState = {
   dataSource: 'local',             // local | live | demo(dev only)
   aiEngine: 'loading',             // loading | ready | error
   cameraStatus: 'off',             // off | starting | live | denied | error
+  deviceLocationStatus: 'idle',    // idle | locating | ready | denied | unavailable (webcam location)
   modelError: '',
   latencyMs: 0,
   privacyMode: 'anonymous',
@@ -54,9 +55,7 @@ export const guardianState = {
   corroboration: [],
   corroborationResult: null,
   handoff: null,
-
-  // gamification — shared rescue leaderboard from the backend (null until loaded)
-  leaderboard: null
+  mapsHelp: null                   // last { incidentId, at } where Google Maps help was opened
 };
 
 /* ---------------------------------------------------------------------------
@@ -216,9 +215,9 @@ export function setHandoff(handoff) {
   update({ handoff: handoff || null });
 }
 
-export function setLeaderboard(leaderboard) {
-  if (!leaderboard || !Array.isArray(leaderboard.responders)) return;
-  update({ leaderboard });
+/** The operator opened a Google Places result from Nearby Response for an incident. */
+export function recordMapsHelp(incidentId) {
+  update({ mapsHelp: { incidentId, at: Date.now() } });
 }
 
 /** Snapshot used for debugging in the console: window.guardian.snapshot() */

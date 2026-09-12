@@ -9,6 +9,7 @@
 
 import { $, el, show } from './util.js';
 import { coordinatesOf, fetchCameras, fetchNearbyHelp } from './datasource.js';
+import { recordMapsHelp } from './state.js';
 
 const WORKFLOW_LABELS = {
   idle: 'Idle',
@@ -83,7 +84,14 @@ function safeMapsUrl(url) {
   }
 }
 
-export function createResponsePanel() {
+/** The browser webcam's camera ID (see app.js clearLocalAssessment). */
+const LOCAL_WEBCAM_ID = 'CAM-LIVE';
+
+/**
+ * @param {{deviceLocation?: ReturnType<import('./device-location.js').createDeviceLocation>}} deps
+ *   deviceLocation supplies coordinates for the local webcam, whose location is this device's.
+ */
+export function createResponsePanel({ deviceLocation = null } = {}) {
   const stateEl = $('#response-state');
   const stateValue = $('#response-state-value');
   const list = $('#responder-list');
@@ -147,6 +155,9 @@ export function createResponsePanel() {
     const candidates = (state.incidents || []).filter((i) => NEARBY_TRIGGER_STATUSES.has(i.status));
     for (const incident of candidates) {
       let coords = coordinatesOf(incident);
+      if (coords.lat == null && incident.cameraId === LOCAL_WEBCAM_ID && deviceLocation?.coords) {
+        coords = deviceLocation.coords;
+      }
       if (coords.lat == null) {
         coords = coordinatesOf((state.cameras || []).find((c) => c.id === incident.cameraId));
       }
@@ -194,7 +205,7 @@ export function createResponsePanel() {
       });
   }
 
-  function buildNearbyItem(r, trusted) {
+  function buildNearbyItem(r, trusted, incidentId) {
     const role = TRUSTED_ROLE_LABELS[r.category];
     // Trusted people: role + anonymous registry ID only. The registry label is
     // never shown, since it could contain a name or other personal detail.
@@ -208,6 +219,17 @@ export function createResponsePanel() {
     const mapsUrl = isPlace && r.maps_url ? safeMapsUrl(r.maps_url) : null;
     const distance = distanceOf(r);
 
+    let link = null;
+    if (mapsUrl) {
+      link = el('a', {
+        class: 'nearby-item__link', href: mapsUrl, target: '_blank', rel: 'noopener noreferrer', text: 'Open in Maps'
+      });
+      // Opening a Google Places result is the operator getting help for this incident.
+      if (r.source === 'google_places' && incidentId) {
+        link.addEventListener('click', () => recordMapsHelp(incidentId));
+      }
+    }
+
     return el('div', { class: 'nearby-item' }, [
       el('div', { class: 'nearby-item__body' }, [
         el('span', { class: 'nearby-item__label', text: label }),
@@ -217,15 +239,11 @@ export function createResponsePanel() {
         }),
         address ? el('span', { class: 'nearby-item__addr', text: address }) : null
       ]),
-      mapsUrl
-        ? el('a', {
-          class: 'nearby-item__link', href: mapsUrl, target: '_blank', rel: 'noopener noreferrer', text: 'Open in Maps'
-        })
-        : null
+      link
     ]);
   }
 
-  function renderNearbyResults(data) {
+  function renderNearbyResults(data, incidentId) {
     const groups = NEARBY_GROUPS.map((group) => {
       const picked = group.pick(data);
       const rows = (Array.isArray(picked) ? picked.slice() : [])
@@ -238,7 +256,7 @@ export function createResponsePanel() {
       return el('div', { class: 'nearby-group' }, [
         el('h4', { class: 'nearby-group__title', text: group.title }),
         note ? el('p', { class: 'nearby-group__note', text: note }) : null,
-        ...rows.map((r) => buildNearbyItem(r, group.trusted))
+        ...rows.map((r) => buildNearbyItem(r, group.trusted, incidentId))
       ]);
     });
     nearbyList.replaceChildren(...groups);
@@ -270,7 +288,7 @@ export function createResponsePanel() {
 
     const where = target ? (target.incident.location || target.incident.cameraId || 'a monitored area') : '';
     const view = !target ? 'idle'
-      : !target.key ? `nocoords|${where}`
+      : !target.key ? `nocoords|${where}|${state.deviceLocationStatus || 'idle'}|${Boolean(registryCoords)}`
         : `${target.key}|${entry ? entry.status : 'offline'}|${where}`;
     if (view === renderedNearbyView) return;
     renderedNearbyView = view;
@@ -284,6 +302,27 @@ export function createResponsePanel() {
 
     const attention = `Attention may be needed near ${where}.`;
     if (!target.key) {
+      const locationStatus = target.incident.cameraId === LOCAL_WEBCAM_ID && deviceLocation
+        ? deviceLocation.status : 'idle';
+      if (locationStatus === 'locating') {
+        nearbyList.replaceChildren();
+        setNearbyHint(`${attention} Getting this device's location...`);
+        setNearbyEmpty(null);
+        return;
+      }
+      if (locationStatus === 'denied' || locationStatus === 'unavailable') {
+        // The webcam was started but no position came back: offer a retry.
+        const retry = el('button', {
+          class: 'btn btn--sm', type: 'button', text: "Use this device's location"
+        });
+        retry.addEventListener('click', () => deviceLocation.request());
+        nearbyList.replaceChildren(retry);
+        setNearbyHint(locationStatus === 'denied'
+          ? `${attention} Location access is blocked. Allow location for this site in the browser, then retry.`
+          : `${attention} This device's location could not be determined.`);
+        setNearbyEmpty(null);
+        return;
+      }
       nearbyList.replaceChildren();
       setNearbyHint(registryRequested && !registryCoords
         ? `${attention} Looking up this camera's location...`
@@ -305,7 +344,7 @@ export function createResponsePanel() {
     }
 
     setNearbyHint(`${attention} Nearest response options, closest first.`);
-    renderNearbyResults(entry.data || {});
+    renderNearbyResults(entry.data || {}, target.incident.id);
   }
 
   function render(state) {

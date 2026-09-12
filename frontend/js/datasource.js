@@ -13,7 +13,7 @@ import { CONFIG, apiUrl, authHeaders, backendOrigin, wsUrl } from './config.js';
 import { EVENT_LABELS } from '../data/mock-events.js';
 import {
   addTimelineEvent, guardianState, setCameraStatus, setConfidence, setCorroboration,
-  setGuardianScore, setLeaderboard, setResponseState, update, upsertIncident
+  setGuardianScore, setResponseState, update, upsertIncident
 } from './state.js';
 import { createEventSocket } from './websocket.js';
 import { clockLabel } from './util.js';
@@ -155,31 +155,6 @@ export async function fetchCameras() {
   }
 }
 
-/** GET {API_BASE}/leaderboard — successful rescues per responder. */
-export async function fetchLeaderboard() {
-  const res = await fetch(apiUrl('/leaderboard'), { headers: authHeaders() });
-  if (!res.ok) throw new Error(`leaderboard request failed: ${res.status}`);
-  const data = await res.json();
-  setLeaderboard(data);
-  return data;
-}
-
-/**
- * POST {API_BASE}/rescues. Idempotent server-side per rescue_key + responder,
- * so a retried submission never double-counts.
- */
-export async function postRescue(rescue) {
-  const res = await fetch(apiUrl('/rescues'), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', ...authHeaders() },
-    body: JSON.stringify(rescue)
-  });
-  if (!res.ok) throw new Error(`rescue submission failed: ${res.status}`);
-  const data = await res.json();
-  setLeaderboard(data.leaderboard);
-  return data;
-}
-
 function clamp01(v) {
   const n = Number(v ?? 0);
   if (!Number.isFinite(n)) return 0;
@@ -263,10 +238,6 @@ export function createDataSource({ engine }) {
 
       case 'corroboration':
         setCorroboration(payload.entries || [], payload.result || null);
-        return;
-
-      case 'leaderboard':
-        setLeaderboard(payload.data);
         return;
 
       case 'pong':

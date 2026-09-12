@@ -618,6 +618,13 @@ The camera registry comes from `GUARDIANMESH_CAMERAS_FILE` in FastAPI or
 `CAMERAS_JSON` in Cloudflare. IDs are normalized so `cam_02`, `CAM-02`, and
 `cam02` match.
 
+The browser webcam (`CAM-LIVE`) needs no registry entry: its location is the
+device's. **Start Live Camera** asks for location permission alongside camera
+permission; the position is rounded to ~11 m, kept in memory for the session,
+and sent only to this site's `/api/nearby-help`. It is dropped when the camera
+stops or a recorded video file is used instead. If permission is denied, the
+Nearby Response panel says so and offers a retry button.
+
 Nearby help combines:
 
 - public hospitals, medical centers/clinics, and pharmacies from Google Places
@@ -690,13 +697,14 @@ existing situation.
 - **Incidents:** one evolving card per correlated situation.
 - **Response Mesh:** simulated responder workflow, recommendations, and live
   nearby-resource lookup when coordinates exist.
-- **Gamification:** local operator XP, levels, streak, and achievements plus a
-  shared rescue leaderboard.
+- **Badges:** local achievement badges and a rescue streak.
 
-Gamification stores personal progress and an offline rescue queue in browser
-`localStorage`. A resolved incident can credit engaged responders through
-`POST /api/rescues`. The server key combines rescue occurrence and responder,
-so retries do not double-count.
+Badges and the streak are stored only in this browser's `localStorage`; nothing
+is sent to a server and there are no XP, levels or leaderboard. Badges reward
+getting help: **Help Found** when the operator opens a Google Places result from
+Nearby Response in Maps (once per incident), plus rescue badges when incidents
+resolve. The backend and Worker still expose the older `/api/leaderboard` and
+`/api/rescues` routes, but the dashboard no longer calls them.
 
 ## 14. Privacy and safety boundary
 
