@@ -235,11 +235,31 @@ Open a WebSocket at `CONFIG.WS_PATH` (default `/ws/events`) and send JSON frames
 ```
 
 One such event updates the score, confidence, camera node, incident card **and**
-the timeline. REST routes are optional: `GET {API_BASE}/status` is probed at boot
-and, when `CONFIG.REQUIRE_API_PROBE` is true, gates whether the WebSocket is
-opened at all (this keeps the console clean during offline demos). Call
-`window.guardian.connect()` to retry once the backend is up, or set
-`REQUIRE_API_PROBE: false` if your stack exposes the socket without that route.
+the timeline.
+
+### Turning the backend on
+
+`CONFIG.BACKEND_ENABLED` is **false** by default, and while it is false the
+frontend makes **no network requests at all** — it runs entirely on demo data.
+That is deliberate: a reachability probe against a plain static server answers
+404, and the browser logs that 404 to the console itself (no JavaScript can
+suppress it), which is noise you do not want on a projector.
+
+Two ways to attach a live backend:
+
+```js
+window.guardian.connect()      // console, no file edits — connects immediately
+```
+```js
+// frontend/js/config.js — permanent
+BACKEND_ENABLED: true
+```
+
+Once enabled, `GET {API_BASE}/status` is probed at boot and, when
+`CONFIG.REQUIRE_API_PROBE` is true, gates whether the WebSocket is opened at all.
+Set `REQUIRE_API_PROBE: false` if your stack exposes the socket without that
+route. A dropped socket retries on a bounded backoff ladder and then stops,
+reporting DISCONNECTED in the header rather than retrying forever.
 
 **Confidence and Guardian Score are separate quantities and must stay separate.**
 Confidence = how certain the classification is. Guardian Score = how concerning

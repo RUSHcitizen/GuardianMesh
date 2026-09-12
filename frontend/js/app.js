@@ -295,7 +295,10 @@ dataSource.connect();
 window.guardian = {
   snapshot, demo, engine, camera, dataSource,
   emit: (payload) => dataSource.handleGuardianEvent(payload),
-  score: (v) => update({ previousScore: guardianState.guardianScore, guardianScore: round(v, 1) })
+  score: (v) => update({ previousScore: guardianState.guardianScore, guardianScore: round(v, 1) }),
+  /** Attach a live backend without editing config.js. */
+  connect: () => dataSource.connect({ force: true }),
+  disconnect: () => dataSource.disconnect()
 };
 window.__GUARDIAN_BOOTED__ = true;
 console.info('%c GuardianMesh ', 'background:#55c8ec;color:#071018;font-weight:700',

@@ -164,8 +164,20 @@ export function createDataSource({ engine }) {
     }
   }
 
-  /** Probe REST (optional) then open the realtime stream. Never throws. */
+  /**
+   * Probe REST (optional) then open the realtime stream. Never throws.
+   * @param {{force?: boolean}} opts force bypasses CONFIG.BACKEND_ENABLED, so
+   *        window.guardian.connect() works without editing config.js.
+   */
   async function connect({ force = false } = {}) {
+    if (!CONFIG.BACKEND_ENABLED && !force) {
+      // Stay fully offline: no fetch, no socket, nothing for the browser to log.
+      console.info('[guardian] running on demo data (CONFIG.BACKEND_ENABLED is false). '
+        + 'Run window.guardian.connect() to attach a live backend.');
+      setBackendStatus('disconnected');
+      return;
+    }
+
     setBackendStatus('connecting');
     let reachable = !CONFIG.REQUIRE_API_PROBE || force;
 

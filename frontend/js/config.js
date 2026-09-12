@@ -4,6 +4,20 @@
  */
 
 export const CONFIG = {
+  /**
+   * Flip to true once a backend is actually running.
+   *
+   * While this is false the frontend makes NO network requests at all: it runs
+   * entirely on demo data. That is deliberate. A reachability probe against a
+   * plain static server answers 404, and the browser logs that 404 to the
+   * console itself — no JavaScript can suppress it — which is noise nobody
+   * wants on a projector during a demo.
+   *
+   * You do not have to edit this file to test a live backend: run
+   * window.guardian.connect() in the console and it connects immediately.
+   */
+  BACKEND_ENABLED: false,
+
   /** Backend REST base. Set to null to disable probing entirely. */
   API_BASE: '/api',
 
