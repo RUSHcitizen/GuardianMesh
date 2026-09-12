@@ -1,0 +1,11 @@
+{
+  "name": "guardianmesh",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GuardianMesh — privacy-first AI emergency awareness network (frontend command center)",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {}
+}

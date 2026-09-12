@@ -1,0 +1,100 @@
+/* ==========================================================================
+   GuardianMesh — Design tokens
+   Single source of truth for color, spacing, type, radius, motion.
+   Do not introduce ad-hoc values elsewhere; extend this file instead.
+   ========================================================================== */
+
+:root {
+  /* --- Surfaces ---------------------------------------------------------- */
+  --bg-primary: #060f16;
+  --bg-secondary: #09151f;
+  --bg-panel: #0c1a24;
+  --bg-panel-elevated: #112533;
+  --bg-inset: #081420;
+  --bg-stage: #05080c;
+
+  /* --- Text -------------------------------------------------------------- */
+  --text-primary: #f2f6f9;
+  --text-secondary: #8fa4b3;
+  --text-muted: #5e7382;
+
+  /* --- Semantic status --------------------------------------------------- */
+  --tracking: #55c8ec;   /* tracking, AI analysis, system information */
+  --safe: #44d19f;       /* normal, connected, resolved */
+  --warning: #f5b942;    /* observation, elevated concern */
+  --critical: #ed5656;   /* critical events only */
+  --inference: #7aa6f0;  /* derived reasoning steps */
+
+  --tracking-soft: rgba(85, 200, 236, 0.14);
+  --safe-soft: rgba(68, 209, 159, 0.14);
+  --warning-soft: rgba(245, 185, 66, 0.14);
+  --critical-soft: rgba(237, 86, 86, 0.14);
+  --inference-soft: rgba(122, 166, 240, 0.14);
+
+  /* --- Lines ------------------------------------------------------------- */
+  --border: rgba(255, 255, 255, 0.075);
+  --border-strong: rgba(255, 255, 255, 0.145);
+  --border-inset: rgba(0, 0, 0, 0.45);
+
+  /* --- Radius ------------------------------------------------------------ */
+  --radius-xs: 3px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-pill: 999px;
+
+  /* --- Spacing scale ----------------------------------------------------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 40px;
+
+  /* --- Type -------------------------------------------------------------- */
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Roboto Mono", Menlo, Consolas, monospace;
+
+  --fs-micro: 9.5px;
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-lg: 15px;
+  --fs-xl: 19px;
+  --fs-display: 36px;
+
+  --track-label: 0.1em;   /* letter-spacing for uppercase micro labels */
+  --track-wide: 0.16em;
+
+  /* --- Elevation --------------------------------------------------------- */
+  --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 10px 28px rgba(0, 0, 0, 0.34);
+  --shadow-raised: 0 6px 18px rgba(0, 0, 0, 0.4);
+
+  /* --- Motion ------------------------------------------------------------ */
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --dur-fast: 140ms;
+  --dur-base: 260ms;
+  --dur-slow: 620ms;
+
+  /* --- Layout ------------------------------------------------------------ */
+  --header-h: 54px;
+  --gap: var(--space-3);
+}
+
+/* Status colour resolution: any element carrying data-status resolves a single
+   --status-color token, so components never branch on status in their own CSS. */
+[data-status] { --status-color: var(--text-secondary); --status-soft: rgba(255,255,255,0.06); }
+[data-status="normal"],
+[data-status="safe"],
+[data-status="clear"],
+[data-status="resolved"],
+[data-status="online"]     { --status-color: var(--safe);     --status-soft: var(--safe-soft); }
+[data-status="observing"],
+[data-status="elevated"]   { --status-color: var(--warning);  --status-soft: var(--warning-soft); }
+[data-status="warning"],
+[data-status="high"]       { --status-color: var(--warning);  --status-soft: var(--warning-soft); }
+[data-status="critical"]   { --status-color: var(--critical); --status-soft: var(--critical-soft); }
+[data-status="tracking"],
+[data-status="active"]     { --status-color: var(--tracking); --status-soft: var(--tracking-soft); }
+[data-status="offline"],
+[data-status="idle"]       { --status-color: var(--text-muted); --status-soft: rgba(255,255,255,0.05); }

@@ -1,0 +1,9 @@
+node_modules/
+.DS_Store
+*.log
+.env
+.venv/
+__pycache__/
+frontend/assets/video/*.mp4
+frontend/assets/video/*.webm
+frontend/assets/video/*.mov

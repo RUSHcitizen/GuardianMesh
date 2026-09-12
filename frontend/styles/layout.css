@@ -1,0 +1,257 @@
+/* ==========================================================================
+   GuardianMesh — App shell, system header, dashboard grid, panel chrome
+   ========================================================================== */
+
+.app-shell {
+  display: grid;
+  grid-template-rows: var(--header-h) minmax(0, 1fr);
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* --------------------------------------------------------------------------
+   System header
+   -------------------------------------------------------------------------- */
+
+.system-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0 var(--space-4);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.032), transparent),
+              var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
+}
+
+.brand { display: flex; align-items: center; gap: var(--space-3); flex: 0 0 auto; }
+
+.brand__mark {
+  position: relative;
+  width: 24px; height: 24px;
+  display: grid; place-items: center;
+}
+.brand__mark svg { width: 100%; height: 100%; }
+
+.brand__text { display: flex; flex-direction: column; line-height: 1.1; }
+.brand__name {
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  letter-spacing: 0.055em;
+  color: var(--text-primary);
+}
+.brand__name em { font-style: normal; color: var(--tracking); }
+.brand__sub {
+  font-size: var(--fs-micro);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.header__divider {
+  width: 1px;
+  align-self: stretch;
+  margin: var(--space-3) 0;
+  background: var(--border);
+  flex: 0 0 auto;
+}
+
+.status-rail {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.status-rail::-webkit-scrollbar { display: none; }
+
+.stat {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+.stat__body { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.stat__label {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.stat__value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.stat__value[data-status] { color: var(--status-color); }
+
+.header__controls { display: flex; align-items: center; gap: var(--space-2); flex: 0 0 auto; }
+
+.demo-flag {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-inset);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* --------------------------------------------------------------------------
+   Dashboard grid
+   The camera panel is deliberately the dominant visual mass.
+   -------------------------------------------------------------------------- */
+
+.guardian-dashboard {
+  display: grid;
+  gap: var(--gap);
+  padding: var(--gap);
+  min-height: 0;
+  grid-template-columns: minmax(0, 1.68fr) minmax(288px, 0.74fr) minmax(300px, 0.8fr);
+  grid-template-rows: minmax(0, 1.42fr) minmax(0, 1fr);
+  grid-template-areas:
+    "camera score     timeline"
+    "mesh   incidents response";
+}
+
+.camera-panel   { grid-area: camera; }
+.score-panel    { grid-area: score; }
+.timeline-panel { grid-area: timeline; }
+.mesh-panel     { grid-area: mesh; }
+.incident-panel { grid-area: incidents; }
+.response-panel { grid-area: response; }
+
+/* --------------------------------------------------------------------------
+   Panel chrome
+   -------------------------------------------------------------------------- */
+
+.panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.022), transparent 42%),
+              var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
+}
+
+.panel__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
+  min-height: 40px;
+}
+
+.panel__title {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: var(--track-wide);
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.panel__head-meta {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  min-width: 0;
+}
+
+.panel__sub {
+  font-size: var(--fs-micro);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel__body {
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-4);
+}
+.panel__body--flush { padding: 0; }
+.panel__body--tight { padding: var(--space-3); }
+
+/* --------------------------------------------------------------------------
+   Responsive behaviour
+   1920x1080 and 1440x900 are the primary targets; smaller screens stack
+   while keeping the camera large and labels readable.
+   -------------------------------------------------------------------------- */
+
+@media (min-width: 1800px) {
+  :root { --gap: var(--space-4); --fs-display: 40px; }
+  .guardian-dashboard {
+    grid-template-columns: minmax(0, 1.72fr) minmax(320px, 0.72fr) minmax(340px, 0.78fr);
+  }
+}
+
+@media (max-width: 1620px) {
+  .stat { padding: var(--space-1) var(--space-2); }
+}
+
+@media (max-width: 1560px) {
+  /* latency and privacy are also surfaced on the camera HUD */
+  .stat[data-optional="true"] { display: none; }
+}
+
+@media (max-width: 1400px) {
+  :root { --fs-display: 32px; }
+  .guardian-dashboard {
+    grid-template-columns: minmax(0, 1.5fr) minmax(270px, 0.8fr);
+    grid-template-rows: minmax(320px, 1.3fr) auto auto;
+    grid-template-areas:
+      "camera   score"
+      "timeline incidents"
+      "mesh     response";
+    overflow: auto;
+  }
+}
+
+@media (max-width: 1080px) {
+  .guardian-dashboard {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-auto-rows: minmax(0, auto);
+    grid-template-areas:
+      "camera"
+      "score"
+      "timeline"
+      "incidents"
+      "mesh"
+      "response";
+  }
+  .panel { min-height: 200px; }
+  .camera-panel { min-height: 420px; }
+  .status-rail { overflow-x: auto; }
+}
+
+@media (max-width: 820px) {
+  .system-header { flex-wrap: wrap; height: auto; padding: var(--space-2) var(--space-3); }
+  .app-shell { grid-template-rows: auto minmax(0, 1fr); }
+  .brand__sub { display: none; }
+}

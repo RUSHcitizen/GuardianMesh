@@ -1,0 +1,233 @@
+/* ==========================================================================
+   GuardianMesh — Reset, typography primitives, shared atoms
+   ========================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* Component rules set display: flex/grid, which would otherwise out-rank the
+   user-agent [hidden] rule and leave "empty state" panels permanently visible. */
+[hidden] { display: none !important; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(1200px 620px at 18% -8%, rgba(85, 200, 236, 0.055), transparent 62%),
+    radial-gradient(980px 540px at 92% 4%, rgba(122, 166, 240, 0.045), transparent 60%),
+    var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden; /* the dashboard manages its own scroll regions */
+}
+
+h1, h2, h3, p, ol, ul, figure { margin: 0; }
+ol, ul { list-style: none; padding: 0; }
+
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: 0.4; }
+
+:focus-visible {
+  outline: 2px solid var(--tracking);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.09);
+  border-radius: var(--radius-pill);
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.16); }
+
+.skip-link {
+  position: absolute;
+  left: var(--space-3);
+  top: -60px;
+  z-index: 100;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-panel-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  transition: top var(--dur-fast) var(--ease);
+}
+.skip-link:focus { top: var(--space-3); }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- Typographic atoms ---------------------------------------------------- */
+
+.label {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-md);
+  color: var(--text-primary);
+}
+
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* --- Status dot ----------------------------------------------------------- */
+
+.dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--status-color, var(--text-muted));
+  box-shadow: 0 0 0 3px var(--status-soft, transparent);
+  transition: background var(--dur-base) var(--ease), box-shadow var(--dur-base) var(--ease);
+}
+.dot--live { animation: breathe 2.6s var(--ease) infinite; }
+
+@keyframes breathe {
+  0%, 100% { box-shadow: 0 0 0 3px var(--status-soft, transparent); }
+  50%      { box-shadow: 0 0 0 5px transparent; }
+}
+
+/* --- Badge / chip --------------------------------------------------------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-xs);
+  background: var(--status-soft, rgba(255, 255, 255, 0.05));
+  color: var(--status-color, var(--text-secondary));
+  border: 1px solid color-mix(in srgb, var(--status-color, #fff) 26%, transparent);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* --- Buttons -------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel-elevated);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: background var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease),
+              transform var(--dur-fast) var(--ease);
+}
+.btn:hover:not(:disabled) { color: var(--text-primary); border-color: rgba(255, 255, 255, 0.26); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+
+.btn--primary {
+  background: color-mix(in srgb, var(--tracking) 16%, var(--bg-panel-elevated));
+  border-color: color-mix(in srgb, var(--tracking) 46%, transparent);
+  color: #d8f3ff;
+}
+.btn--primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--tracking) 26%, var(--bg-panel-elevated));
+  border-color: var(--tracking);
+  color: #fff;
+}
+
+.btn--ghost { background: transparent; }
+
+.btn--sm { padding: 4px var(--space-2); font-size: var(--fs-micro); }
+
+/* --- Empty / failure states ----------------------------------------------- */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 92px;
+  height: 100%;
+  padding: var(--space-4);
+  text-align: center;
+  color: var(--text-muted);
+}
+.empty-state__icon {
+  width: 26px; height: 26px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  display: grid; place-items: center;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.empty-state__title {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.empty-state__hint { font-size: var(--fs-xs); max-width: 30ch; line-height: 1.5; }
+
+/* --- Boot failure notice (classic-script fallback) ------------------------- */
+
+#boot-error {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: var(--space-6);
+  background: var(--bg-primary);
+  text-align: center;
+}
+#boot-error[hidden] { display: none; }
+#boot-error .boot-card {
+  max-width: 560px;
+  padding: var(--space-6);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-panel);
+}
+#boot-error code {
+  display: inline-block;
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--tracking);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
