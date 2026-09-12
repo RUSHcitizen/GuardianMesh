@@ -140,7 +140,6 @@ class PoseTracker:
             # Convert to Keypoint objects
             keypoints = {}
             bbox_coords = []
-            min_confidence = 1.0
             
             for name, index in self.LANDMARK_INDEXES.items():
                 lm = landmarks.landmark[index]
@@ -152,7 +151,6 @@ class PoseTracker:
                 )
                 keypoints[name] = keypoint
                 bbox_coords.append([lm.x * w, lm.y * h])
-                min_confidence = min(min_confidence, lm.visibility)
             
             if bbox_coords:
                 bbox_coords = np.array(bbox_coords)
@@ -163,9 +161,13 @@ class PoseTracker:
                     bbox_coords[:, 1].max()
                 )
                 
+                core_names = ('left_shoulder', 'right_shoulder', 'left_hip', 'right_hip')
+                core_confidence = float(np.mean([
+                    keypoints[name].confidence for name in core_names
+                ]))
                 pose = Pose(
                     keypoints=keypoints,
-                    confidence=min_confidence,
+                    confidence=core_confidence,
                     bbox=bbox
                 )
                 current_detections.append(pose)
