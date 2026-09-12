@@ -70,7 +70,11 @@ export default {
     }
 
     if ((path === '/api/leaderboard' && request.method === 'GET')
-      || (path === '/api/rescues' && request.method === 'POST')) {
+      || (path === '/api/rescues' && (request.method === 'POST' || request.method === 'DELETE'))) {
+      if (request.method === 'DELETE' && !(await adminAuthorized(request, env))) {
+        // Disabled unless the ADMIN_TOKEN secret is set; 404 so it isn't advertised.
+        return json({ detail: 'Not found' }, 404);
+      }
       if (!env.LEADERBOARD) return json({ detail: 'Leaderboard storage not configured' }, 503);
       const stub = env.LEADERBOARD.get(env.LEADERBOARD.idFromName('global'));
       return stub.fetch(request);
@@ -376,7 +380,8 @@ function round3(value) {
 
 /* ---------------------------------------------------------------------------
    Rescue leaderboard — edge persistence mirroring backend_server.py
-   GET /api/leaderboard, POST /api/rescues (idempotent per rescue_key+responder)
+   GET /api/leaderboard, POST /api/rescues (idempotent per rescue_key+responder),
+   DELETE /api/rescues?source=demo (requires the ADMIN_TOKEN secret)
    --------------------------------------------------------------------------- */
 
 const RESCUE_KEY_RE = /^[A-Za-z0-9_.:@-]{1,120}$/;
@@ -400,6 +405,14 @@ export class Leaderboard extends DurableObject {
 
   async fetch(request) {
     const url = new URL(request.url);
+    if (request.method === 'DELETE') {
+      // Only demo-tagged rows can be removed, so real rescues are never at risk.
+      if (url.searchParams.get('source') !== 'demo') {
+        return json({ detail: 'Only source=demo can be cleared' }, 422);
+      }
+      const removed = this.sql.exec("DELETE FROM rescues WHERE source = 'demo'").rowsWritten;
+      return json({ status: 'cleared', removed, leaderboard: this.snapshot(20) });
+    }
     if (request.method === 'GET') {
       const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit')) || 20));
       return json(this.snapshot(limit));
@@ -441,6 +454,18 @@ export class Leaderboard extends DurableObject {
     const total = this.sql.exec('SELECT COUNT(DISTINCT rescue_key) AS n FROM rescues').one().n;
     return { responders, total_rescues: total, generated_at: new Date().toISOString() };
   }
+}
+
+/** Bearer ADMIN_TOKEN check (constant-time). Always false when the secret is unset. */
+async function adminAuthorized(request, env) {
+  if (!env.ADMIN_TOKEN) return false;
+  const header = request.headers.get('authorization') || '';
+  const presented = header.startsWith('Bearer ') ? header.slice(7) : '';
+  const encoder = new TextEncoder();
+  const [a, b] = await Promise.all([presented, env.ADMIN_TOKEN].map(
+    (value) => crypto.subtle.digest('SHA-256', encoder.encode(value))
+  ));
+  return crypto.subtle.timingSafeEqual(a, b);
 }
 
 function validateRescue(body) {

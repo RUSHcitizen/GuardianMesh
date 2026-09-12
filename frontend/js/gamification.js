@@ -14,7 +14,7 @@
  * unavailable (private windows, blocked site data).
  */
 
-import { INCIDENT_TEMPLATE, RESPONDERS } from '../data/mock-events.js';
+import { RESPONDERS } from '../data/mock-events.js';
 import { fetchLeaderboard, postRescue } from './datasource.js';
 import { guardianState, subscribe, touched } from './state.js';
 import { $, el, replay } from './util.js';
@@ -153,7 +153,9 @@ export function createGamification() {
         rescue_key: record.key,
         incident_id: incident.id,
         camera_id: incident.cameraId || null,
-        source: incident.id === INCIDENT_TEMPLATE.id ? 'demo' : 'live',
+        // The scripted simulation is the only demo source. Incident IDs alone can't
+        // tell: the live-backend correlator also numbers its first incident INC-001.
+        source: guardianState.dataSource === 'demo' ? 'demo' : 'live',
         responders: credited.map((id) => ({ id, name: names[id] || id }))
       });
       flushPending();
