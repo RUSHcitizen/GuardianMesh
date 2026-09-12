@@ -28,6 +28,7 @@ import json
 import logging
 from typing import Dict, List, Optional, Set
 from collections import defaultdict, deque
+import hmac
 import os
 
 from backend.camera_registry import all_cameras, get_camera, normalize_camera_id, valid_coordinates
@@ -216,16 +217,19 @@ class EventInput(BaseModel):
             }
         }
     )
-    camera_id: str
-    fall_score: float
-    immobility_score: float
-    tracking_confidence: float
-    persistence_seconds: float = 0.0
+    camera_id: str = Field(min_length=1, max_length=64)
+    # Raw CV metrics are the only inputs to compute_score(), so bound them:
+    # out-of-range or NaN values could otherwise forge a DISTRESS_EVENT.
+    fall_score: float = Field(ge=0, le=1, allow_inf_nan=False)
+    immobility_score: float = Field(ge=0, le=1, allow_inf_nan=False)
+    tracking_confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+    persistence_seconds: float = Field(default=0.0, ge=0, le=86400, allow_inf_nan=False)
     timestamp: str
     person_id: Optional[int] = None
     # Backward-compatible: older/existing CV clients may still send these.
-    # The backend recomputes both server-side rather than trusting the client.
-    event_type: Optional[str] = None
+    # event_type is kept as a descriptive label only; overall_confidence (and
+    # state/reason) are always recomputed server-side and the client copy ignored.
+    event_type: Optional[str] = Field(default=None, max_length=64)
     overall_confidence: Optional[float] = None
     # Optional camera coordinates; the camera registry fills them in when absent.
     lat: Optional[float] = Field(default=None, ge=-90, le=90)
@@ -251,10 +255,10 @@ class EventOutput(BaseModel):
 class ScoreRequest(BaseModel):
     """Raw metrics for one-off scoring via /api/score"""
     camera_id: Optional[str] = None
-    fall_score: float
-    immobility_score: float
-    tracking_confidence: float
-    persistence_seconds: float = 0.0
+    fall_score: float = Field(ge=0, le=1, allow_inf_nan=False)
+    immobility_score: float = Field(ge=0, le=1, allow_inf_nan=False)
+    tracking_confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+    persistence_seconds: float = Field(default=0.0, ge=0, le=86400, allow_inf_nan=False)
 
 
 class IncidentSummary(BaseModel):
@@ -372,7 +376,7 @@ class ConnectionManager:
                     try:
                         await websocket.send_text(alert_msg)
                     except Exception:
-                        pass
+                        self.disconnect(client_id, websocket)
 
     def get_camera_status(self, camera_id: str) -> dict:
         """Get current status of camera, including registry location/coordinates"""
@@ -408,14 +412,16 @@ app = FastAPI(
     version="1.0.0"
 )
  
-# Enable CORS for frontend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=bool(ACCESS_TOKEN),
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+def token_valid(presented: Optional[str]) -> bool:
+    """Constant-time comparison against GUARDIANMESH_ACCESS_TOKEN (always true when unset)."""
+    if not ACCESS_TOKEN:
+        return True
+    return bool(presented) and hmac.compare_digest(presented.encode(), ACCESS_TOKEN.encode())
+
+
+def bearer_token(authorization: Optional[str]) -> Optional[str]:
+    scheme, _, token = (authorization or "").partition(" ")
+    return token.strip() if scheme.lower() == "bearer" else None
 
 
 @app.middleware("http")
@@ -424,13 +430,24 @@ async def require_access_token(request, call_next):
     public_paths = {"/", "/health", "/api/status"}
     # CORS preflights never carry the Authorization header; let CORSMiddleware answer them.
     if ACCESS_TOKEN and request.method != "OPTIONS" and request.url.path not in public_paths:
-        authorization = request.headers.get("authorization", "")
-        if authorization != f"Bearer {ACCESS_TOKEN}":
+        if not token_valid(bearer_token(request.headers.get("authorization"))):
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Authorization required"},
+                headers={"WWW-Authenticate": "Bearer"},
             )
     return await call_next(request)
+
+
+# Enable CORS for frontend. Registered AFTER the auth middleware so it wraps it:
+# 401 responses then still carry CORS headers and browsers can read them.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=bool(ACCESS_TOKEN),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
  
  
 # ============================================================================
@@ -494,6 +511,12 @@ async def root():
     """
  
  
+CLIENT_FORBIDDEN_FIELDS = {
+    "state", "reason", "overall_confidence", "confidence", "incident_id", "id",
+    "guardianScore", "guardian_score", "status", "label",
+}
+
+
 @app.post("/api/events", response_model=dict)
 async def ingest_event(event: EventInput, db: Session = Depends(get_db)):
     """
@@ -555,7 +578,13 @@ async def ingest_event(event: EventInput, db: Session = Depends(get_db)):
     )
 
     # Broadcast to connected clients (include backend-derived fields)
-    broadcast_payload = event.model_dump()
+    # extra="allow" lets CV clients pass through keypoints/boundingBox/etc., but
+    # never client-supplied copies of fields the server derives or the dashboard
+    # treats as authoritative (it reads guardianScore/confidence/status directly).
+    broadcast_payload = {
+        key: value for key, value in event.model_dump().items()
+        if key not in CLIENT_FORBIDDEN_FIELDS
+    }
     broadcast_payload.update({
         "event_type": event_type,
         "overall_confidence": overall_confidence,
@@ -870,7 +899,10 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             console.log(msg);  // { type: "event", data: {...} }
         };
     """
-    if ACCESS_TOKEN and websocket.query_params.get("token") != ACCESS_TOKEN:
+    # Browsers cannot set headers on WebSocket upgrades, so ?token= is accepted
+    # alongside a standard Bearer header (used by non-browser clients).
+    presented = websocket.query_params.get("token") or bearer_token(websocket.headers.get("authorization"))
+    if not token_valid(presented):
         await websocket.close(code=1008, reason="Authorization required")
         return
 
