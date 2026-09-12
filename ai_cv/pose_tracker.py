@@ -1,6 +1,6 @@
 """
 GuardianMesh: Pose Tracking Module
-Handles pose estimation, multi-person tracking, and keypoint smoothing
+Handles single-person pose estimation, tracking, and keypoint smoothing
 """
  
 import numpy as np
@@ -46,24 +46,35 @@ class Pose:
 class PoseTracker:
     """
     MediaPipe-based pose tracker with:
-    - Multi-person detection
+    - Single-person MediaPipe Pose detection
     - Per-person tracking (ID assignment)
     - Keypoint smoothing (Kalman filtering)
     - Confidence filtering
     """
     
-    # MediaPipe keypoint names (COCO-33 format)
-    KEYPOINT_NAMES = [
-        'nose', 'left_eye', 'right_eye', 'left_ear', 'right_ear',
-        'left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow',
-        'left_wrist', 'right_wrist', 'left_hip', 'right_hip',
-        'left_knee', 'right_knee', 'left_ankle', 'right_ankle',
-        # Additional 16 keypoints in COCO-33
-        'neck', 'head', 'left_hip_alt', 'right_hip_alt',
-        'left_knee_alt', 'right_knee_alt', 'left_ankle_alt', 'right_ankle_alt',
-        'left_eye_inner', 'left_eye_outer', 'right_eye_inner', 'right_eye_outer',
-        'left_ear_inner', 'right_ear_inner', 'mouth_left', 'mouth_right'
-    ]
+    # Explicit MediaPipe Pose landmark indices. Never enumerate a custom name
+    # list by position: MediaPipe's 33-point layout includes eye/mouth/foot
+    # details between the body joints used by GuardianMesh.
+    LANDMARK_INDEXES = {
+        'nose': 0,
+        'left_eye': 2,
+        'right_eye': 5,
+        'left_ear': 7,
+        'right_ear': 8,
+        'left_shoulder': 11,
+        'right_shoulder': 12,
+        'left_elbow': 13,
+        'right_elbow': 14,
+        'left_wrist': 15,
+        'right_wrist': 16,
+        'left_hip': 23,
+        'right_hip': 24,
+        'left_knee': 25,
+        'right_knee': 26,
+        'left_ankle': 27,
+        'right_ankle': 28,
+    }
+    KEYPOINT_NAMES = list(LANDMARK_INDEXES)
     
     def __init__(
         self,
@@ -123,7 +134,7 @@ class PoseTracker:
         # Parse detections
         current_detections = []
         if results.pose_landmarks:
-            # Multiple people might be detected; MediaPipe returns per-person landmarks
+            # Classic mp.solutions.pose returns one landmark set per frame.
             landmarks = results.pose_landmarks
             
             # Convert to Keypoint objects
@@ -131,17 +142,17 @@ class PoseTracker:
             bbox_coords = []
             min_confidence = 1.0
             
-            for i, lm in enumerate(landmarks.landmark):
-                if i < len(self.KEYPOINT_NAMES):
-                    keypoint = Keypoint(
-                        x=lm.x * w,
-                        y=lm.y * h,
-                        z=lm.z,
-                        confidence=lm.visibility
-                    )
-                    keypoints[self.KEYPOINT_NAMES[i]] = keypoint
-                    bbox_coords.append([lm.x * w, lm.y * h])
-                    min_confidence = min(min_confidence, lm.visibility)
+            for name, index in self.LANDMARK_INDEXES.items():
+                lm = landmarks.landmark[index]
+                keypoint = Keypoint(
+                    x=lm.x * w,
+                    y=lm.y * h,
+                    z=lm.z,
+                    confidence=lm.visibility
+                )
+                keypoints[name] = keypoint
+                bbox_coords.append([lm.x * w, lm.y * h])
+                min_confidence = min(min_confidence, lm.visibility)
             
             if bbox_coords:
                 bbox_coords = np.array(bbox_coords)
