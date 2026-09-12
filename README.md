@@ -59,46 +59,53 @@ simulated response → movement resumed → resolved.
 RESET cancels the sequence, clears incidents/timeline/corroboration, resets the
 score, restores every camera and responder node, and returns the stage to normal.
 
-## Deploying the dashboard (Cloudflare Pages)
+## Deploying the dashboard (Cloudflare)
 
 The command center is static — HTML, CSS and ES modules, no build step, no
 dependencies — so deploying it is just serving `frontend/`.
 
-**Pages project settings**
+`wrangler.toml` configures this as an **assets-only Worker** (Workers Static
+Assets): no `main`, just `[assets] directory = "./frontend"`. That matches the
+deploy command this project runs, `npx wrangler deploy`, which is the Workers
+command. Validated against wrangler 4.131.1:
 
-| Setting | Value |
-|---|---|
-| Root directory | `frontend` |
-| Build command | *(leave empty)* |
-| Build output directory | `/` |
+```
+✨ Read 32 files from the assets directory .../frontend
+```
 
-`wrangler.toml` declares the output directory in-repo, but **the root directory
-is a project setting and has to be set once in the dashboard.**
+**Workers or Pages — the config and the deploy command must agree.** They are
+two different products with two different commands:
 
-**Why `requirements.txt` is not in the repository root.** Cloudflare's build
-image installs any dependency manifest it finds in the build root, so a root
-`requirements.txt` made every deploy of a *static page* try to install the CV/ML
-stack (opencv, mediapipe, torch) — and fail:
+| Target | `wrangler.toml` | Deploy command | URL |
+|---|---|---|---|
+| Workers (current) | `[assets] directory = "./frontend"` | `npx wrangler deploy` | `*.workers.dev` |
+| Pages | `pages_build_output_dir = "frontend"` | `npx wrangler pages deploy frontend` | `*.pages.dev` |
+
+Mixing them is what produced `It seems that you have run wrangler deploy on a
+Pages project` — a Pages-shaped config being deployed with the Workers command.
+
+**Why `requirements.txt` is not in the repository root.** Cloudflare installs any
+dependency manifest it finds in the build root, so a root `requirements.txt` made
+every deploy of a *static page* try to install the CV/ML stack (opencv,
+mediapipe, torch) — and fail:
 
 ```
 ERROR: Could not find a version that satisfies the requirement mediapipe==0.10.8
        (from versions: 0.10.30, ... 1.0.1)
 ```
 
-Moving it to `requirements/requirements.txt` removes the trigger entirely, so the
-build installs nothing and finishes in seconds. Nothing else changed: the file's
-contents are identical, only the path moved.
+Moving it to `requirements/requirements.txt` removes the trigger, so the build
+installs nothing and finishes in seconds. The file's contents are unchanged.
 
-**Do not fix this by raising the mediapipe pin.** `0.10.8` is the last release
+**Do not fix that by raising the mediapipe pin.** `0.10.8` is the last release
 that still exposes the `mp.solutions` API `ai_cv/pose_tracker.py` is built on —
 verified: `0.10.30` and `1.0.1` both drop it and crash the tracker at startup.
 Raising the pin would trade a visible build failure for a silent runtime one.
 
 **What gets deployed.** Demo Mode, which makes no network requests at all — so
-the published page is fully self-contained. `?live` only works where the
-browser can reach the backend; on an HTTPS deployment an `http://` backend is
-blocked as mixed content, and the dashboard now says so in the console instead
-of hanging.
+the published page is fully self-contained. `?live` only works where the browser
+can reach the backend; on an HTTPS deployment an `http://` backend is blocked as
+mixed content, and the dashboard says so in the console instead of hanging.
 
 ## Project layout
 

@@ -1,15 +1,28 @@
-# Cloudflare Pages configuration for the GuardianMesh command center.
+# Cloudflare configuration for the GuardianMesh command center.
 #
-# The deployable artifact is frontend/ — static HTML, CSS and ES modules with
-# no build step and no dependencies. Nothing in this repository needs to be
-# compiled or installed to serve it.
+# The deployable artifact is frontend/ — static HTML, CSS and ES modules, with
+# no build step and no dependencies. Nothing here needs compiling or installing
+# to serve it, so this is an assets-only Worker: no `main`, just static files.
 #
-# Python requirements deliberately live in requirements/ rather than the
-# repository root: Cloudflare installs any dependency manifest it finds in the
-# build root, which made every deploy of this static page try to install the
-# CV/ML stack (opencv, mediapipe, torch) and fail. The pin cannot simply be
-# raised — every mediapipe release after 0.10.8 removes the `mp.solutions` API
-# that ai_cv/pose_tracker.py uses.
+# This is deliberately a Workers Static Assets config rather than a Pages one.
+# The deploy command configured for this project is `npx wrangler deploy`, which
+# is the Workers command; a `pages_build_output_dir` key here would make wrangler
+# treat the project as Pages and warn that `wrangler pages deploy` should have
+# been used instead. To go back to Pages, replace the [assets] block with
+# `pages_build_output_dir = "frontend"` AND change the deploy command to
+# `npx wrangler pages deploy frontend` — the two have to agree.
+#
+# Python requirements live in requirements/ rather than the repository root:
+# Cloudflare installs any dependency manifest it finds in the build root, which
+# made every deploy of this static page try to install the CV/ML stack (opencv,
+# mediapipe, torch) and fail. The pin cannot simply be raised — every mediapipe
+# release after 0.10.8 removes the `mp.solutions` API ai_cv/pose_tracker.py uses.
 
 name = "guardianmesh"
-pages_build_output_dir = "frontend"
+compatibility_date = "2026-09-12"
+
+[assets]
+directory = "./frontend"
+# Left at the default (404 for unknown paths) on purpose. SPA fallback would
+# serve index.html for a mistyped /js/*.js, so a broken module would surface as
+# a confusing syntax error instead of an honest 404.
