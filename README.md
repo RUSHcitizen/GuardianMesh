@@ -339,3 +339,5 @@ python3.9 -m py_compile ai_cv/*.py backend/*.py
 ```
 
 Run the camera against a short video file with `--no_viz --max_frames 120` when a webcam is unavailable. The evaluator in `ai_cv/evaluate_pipeline.py` is for labeled datasets and is separate from the live path.
+
+Did use home computer and own server to make this and fix errors.
