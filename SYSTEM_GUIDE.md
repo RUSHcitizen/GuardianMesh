@@ -291,10 +291,30 @@ An **instability sample** requires all of:
 
 ```text
 body_angle >= 38 degrees
-AND (descent_distance >= 0.06 OR near_ground)
+AND descent_distance >= 0.06
 ```
 
-It must persist for 450 ms. A lean without descent/ground evidence is not enough.
+It must persist for 450 ms. A lean, horizontal posture, or near-ground posture
+without observed downward travel is not enough.
+
+### Stillness, small movements, and sleep-like posture
+
+Stillness becomes concerning only after the state machine has witnessed a
+descent followed by a horizontal near-ground posture. In that context, 2.2
+seconds of low motion enters `IMMOBILE`. Ordinary standing still does not.
+
+Once the person is in a post-fall ground state, the detector also counts the
+rising edges of small movement bursts: motion above the immobility threshold
+`0.045` but below recovery motion `0.09`. Three bursts within a rolling four
+seconds after post-fall immobility enter `POSSIBLE_DISTRESS`, even if those
+bursts keep resetting the continuous no-movement timer. This is only an
+observable motion-pattern rule; it does not identify twitching, seizure, sleep,
+consciousness, or a medical condition.
+
+If tracking starts while a person is already lying down, there is no witnessed
+descent. The posture therefore remains `NORMAL`, including with occasional
+small sleep-like movements. GuardianMesh cannot actually recognize sleep from
+pose landmarks; it distinguishes the scenarios using their observed history.
 
 ### States and transitions
 
@@ -304,8 +324,8 @@ It must persist for 450 ms. A lean without descent/ground evidence is not enough
 | `INSTABILITY` | 450 ms of leaning plus descent/ground evidence | Rapid descent -> `RAPID_DESCENT`; grounded with enough descent -> `GROUND`; upright for 900 ms or candidate lasts 1.9 s -> `NORMAL` |
 | `RAPID_DESCENT` | 280 ms of meaningful downward movement | Grounded for 600 ms -> `GROUND`; upright for 900 ms or candidate lasts 1.9 s -> `NORMAL`/`INSTABILITY` |
 | `GROUND` | Fall candidate reaches a horizontal, near-bottom posture | Low motion for 2.2 s -> `IMMOBILE`; non-ground/upright or recovery motion -> `RECOVERY` |
-| `IMMOBILE` | Confirmed ground posture plus 2.2 s with motion <= 0.045 | Both ground time and no-movement time reach 4.8 s -> `POSSIBLE_DISTRESS`; recovery -> `RECOVERY` |
-| `POSSIBLE_DISTRESS` | Sustained post-fall immobility | Movement away from grounded posture -> `RECOVERY` |
+| `IMMOBILE` | Confirmed post-fall ground posture plus 2.2 s with motion <= 0.045 | Ground and no-movement time both reach 4.8 s, or three small bursts occur within 4 s -> `POSSIBLE_DISTRESS`; recovery -> `RECOVERY` |
+| `POSSIBLE_DISTRESS` | Sustained post-fall immobility or repeated post-fall small movements | Movement away from grounded posture -> `RECOVERY` |
 | `RECOVERY` | Rising or renewed movement after a ground state | Upright for 1.2 s -> `NORMAL`; grounded and still again -> `GROUND` |
 
 `recoveryMotion` is `0.09`. “Upright” means angle below 38 degrees, box ratio
@@ -693,15 +713,17 @@ What is processed or stored:
 | Gamification | Browser localStorage | Rescue credits in SQLite/Durable Object |
 
 GuardianMesh cannot determine why somebody fell, whether somebody is having a
-heart attack, whether a person is conscious, or whether emergency services are
-required. “Possible distress” means the observed sequence matched descent,
-ground posture, and sustained low movement. A human must verify it.
+heart attack, whether a person is asleep or conscious, or whether emergency
+services are required. “Possible distress” means the observed sequence matched
+descent and ground posture followed by sustained low movement or repeated small
+movement bursts. A human must verify it.
 
 ## 15. False positives, false negatives, and camera setup
 
 The system is intentionally less sensitive to chewing/talking and one-frame
 jitter. Regression tests cover standing still, chewing/talking noise, crouching,
-stumbling/recovery, and fall/collapse-like movement.
+stumbling/recovery, sleep-like floor posture, post-fall small movement bursts,
+and fall/collapse-like movement.
 
 Detection can still fail when:
 
