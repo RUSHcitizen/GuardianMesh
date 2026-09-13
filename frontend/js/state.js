@@ -18,6 +18,7 @@ export const guardianState = {
   aiEngine: 'loading',             // loading | ready | error
   cameraStatus: 'off',             // off | starting | live | denied | error
   deviceLocationStatus: 'idle',    // idle | locating | ready | denied | unavailable (webcam location)
+  deviceLocationShared: false,     // operator chose to use this device's location for any incident
   modelError: '',
   latencyMs: 0,
   privacyMode: 'anonymous',

@@ -155,6 +155,7 @@ export function createResponsePanel({ deviceLocation = null } = {}) {
     const candidates = (state.incidents || []).filter((i) => NEARBY_TRIGGER_STATUSES.has(i.status));
     for (const incident of candidates) {
       let coords = coordinatesOf(incident);
+      // The webcam is this device, so its location wins for webcam incidents.
       if (coords.lat == null && incident.cameraId === LOCAL_WEBCAM_ID && deviceLocation?.coords) {
         coords = deviceLocation.coords;
       }
@@ -163,6 +164,10 @@ export function createResponsePanel({ deviceLocation = null } = {}) {
       }
       if (coords.lat == null && registryCoords) {
         coords = registryCoords.get(cameraKey(incident.cameraId)) || {};
+      }
+      // Other cameras only fall back to it when the operator explicitly chose to share it.
+      if (coords.lat == null && deviceLocation?.shared && deviceLocation.coords) {
+        coords = deviceLocation.coords;
       }
       if (coords.lat != null) {
         const key = `${incident.id}@${coords.lat.toFixed(5)},${coords.lng.toFixed(5)}`;
@@ -288,7 +293,7 @@ export function createResponsePanel({ deviceLocation = null } = {}) {
 
     const where = target ? (target.incident.location || target.incident.cameraId || 'a monitored area') : '';
     const view = !target ? 'idle'
-      : !target.key ? `nocoords|${where}|${state.deviceLocationStatus || 'idle'}|${Boolean(registryCoords)}`
+      : !target.key ? `nocoords|${where}|${state.deviceLocationStatus || 'idle'}|${Boolean(state.deviceLocationShared)}|${Boolean(registryCoords)}`
         : `${target.key}|${entry ? entry.status : 'offline'}|${where}`;
     if (view === renderedNearbyView) return;
     renderedNearbyView = view;
@@ -302,32 +307,38 @@ export function createResponsePanel({ deviceLocation = null } = {}) {
 
     const attention = `Attention may be needed near ${where}.`;
     if (!target.key) {
-      const locationStatus = target.incident.cameraId === LOCAL_WEBCAM_ID && deviceLocation
-        ? deviceLocation.status : 'idle';
+      const locationStatus = deviceLocation ? deviceLocation.status : 'idle';
       if (locationStatus === 'locating') {
         nearbyList.replaceChildren();
         setNearbyHint(`${attention} Getting this device's location...`);
         setNearbyEmpty(null);
         return;
       }
-      if (locationStatus === 'denied' || locationStatus === 'unavailable') {
-        // The webcam was started but no position came back: offer a retry.
-        const retry = el('button', {
-          class: 'btn btn--sm', type: 'button', text: "Use this device's location"
-        });
-        retry.addEventListener('click', () => deviceLocation.request());
-        nearbyList.replaceChildren(retry);
-        setNearbyHint(locationStatus === 'denied'
-          ? `${attention} Location access is blocked. Allow location for this site in the browser, then retry.`
-          : `${attention} This device's location could not be determined.`);
+      if (registryRequested && !registryCoords) {
+        nearbyList.replaceChildren();
+        setNearbyHint(`${attention} Looking up this camera's location...`);
         setNearbyEmpty(null);
         return;
       }
-      nearbyList.replaceChildren();
-      setNearbyHint(registryRequested && !registryCoords
-        ? `${attention} Looking up this camera's location...`
-        : `${attention} Location coordinates are not available for this incident.`);
-      setNearbyEmpty('Nearby response unavailable');
+      if (!deviceLocation) {
+        nearbyList.replaceChildren();
+        setNearbyHint(`${attention} Location coordinates are not available for this incident.`);
+        setNearbyEmpty('Nearby response unavailable');
+        return;
+      }
+      // Never a dead end: the operator can always choose to use this device's
+      // location (first time, after a denial, or when the prompt went unanswered).
+      const useDevice = el('button', {
+        class: 'btn btn--sm', type: 'button', text: "Use this device's location"
+      });
+      useDevice.addEventListener('click', () => deviceLocation.request({ explicit: true }));
+      nearbyList.replaceChildren(useDevice);
+      setNearbyHint(locationStatus === 'denied'
+        ? `${attention} Location access is blocked. Allow location for this site in the browser, then retry.`
+        : locationStatus === 'unavailable'
+          ? `${attention} This device's location could not be determined. Try again?`
+          : `${attention} This camera's location isn't known. Use this device's location to find nearby help.`);
+      setNearbyEmpty(null);
       return;
     }
     if (!entry || entry.status === 'failed') {

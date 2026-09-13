@@ -78,7 +78,7 @@ subscribe((state, changed) => {
   if (touched(changed, 'cameras', 'sensors', 'corroboration', 'corroborationResult',
     'handoff', 'activeCamera')) panels.mesh.render(state);
   if (touched(changed, 'responders', 'responseState', 'recommendations')) panels.response.render(state);
-  if (touched(changed, 'incidents', 'cameras', 'backendStatus', 'deviceLocationStatus')) {
+  if (touched(changed, 'incidents', 'cameras', 'backendStatus', 'deviceLocationStatus', 'deviceLocationShared')) {
     panels.response.renderNearby(state);
   }
   if (touched(changed, 'dataSource', 'backendStatus', 'aiEngine', 'cameraStatus')) renderDataSourceFlag(state);

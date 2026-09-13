@@ -622,8 +622,13 @@ The browser webcam (`CAM-LIVE`) needs no registry entry: its location is the
 device's. **Start Live Camera** asks for location permission alongside camera
 permission; the position is rounded to ~11 m, kept in memory for the session,
 and sent only to this site's `/api/nearby-help`. It is dropped when the camera
-stops or a recorded video file is used instead. If permission is denied, the
-Nearby Response panel says so and offers a retry button.
+stops or a recorded video file is used instead.
+
+Nearby Response never dead-ends on a missing location: when an incident's camera
+location is unknown (simulation, video file, unregistered camera), permission
+was denied, or the browser prompt goes unanswered for 20 seconds, the panel
+offers **Use this device's location**. Choosing it applies the device position
+to those incidents for the session; other cameras never use it silently.
 
 Nearby help combines:
 
