@@ -158,12 +158,13 @@ function renderFeatures(people) {
 
 /* Browser inference -> state actions -> existing subscribers. */
 const stateRank = {
-  NORMAL: 0, RECOVERY: 1, INSTABILITY: 2, RAPID_DESCENT: 3,
-  GROUND: 4, IMMOBILE: 5, POSSIBLE_DISTRESS: 6
+  NORMAL: 0, RESTING: 1, RECOVERY: 2, INSTABILITY: 3, RAPID_DESCENT: 4,
+  GROUND: 5, IMMOBILE: 6, POSSIBLE_DISTRESS: 7
 };
 const incidentByTrack = new Map();
 const incidentStartedAt = new Map();
 const previousFallState = new Map();
+const previousActivity = new Map();
 let incidentSeq = 0;
 let lastSync = 0;
 let lastSignature = '';
@@ -201,6 +202,33 @@ function upsertLocalIncident(person, score) {
   });
 }
 
+/**
+ * Log the activities that explain away a fall-shaped posture. Somebody
+ * crouching or lying down deliberately is exactly the case an operator would
+ * otherwise expect an alert for, so saying why there isn't one is the point.
+ */
+const NOTABLE_ACTIVITY = {
+  REACHING_DOWN: 'reached down to floor level — feet planted, legs extended. Not a fall.',
+  CROUCHING: 'crouched — torso upright over folded legs. Not a fall.',
+  SITTING: 'sat down — controlled descent to a seated posture.',
+  LYING_SETTLED: 'lay down under their own control — descent was gradual, not a collapse.',
+  STATIONARY_TASK: 'stationary task — hands active while torso and feet stay put.'
+};
+
+function handleActivityTransition(person, previous) {
+  if (previous === undefined || person.activity === previous) return;
+  const note = NOTABLE_ACTIVITY[person.activity];
+  if (!note) return;
+  addTimelineEvent({
+    kind: 'observation',
+    title: `${person.trackingId} ${note}`,
+    facts: [
+      { label: 'Activity', value: person.activityLabel },
+      { label: 'Assessment', value: 'No incident opened' }
+    ]
+  });
+}
+
 function handleFallTransition(person, previous, score) {
   const facts = [
     { label: 'Track', value: person.trackingId },
@@ -219,6 +247,7 @@ function handleFallTransition(person, previous, score) {
     ? 'Possible distress — repeated small movements after post-fall immobility.'
     : 'Possible collapse / distress — sustained immobility after a fall.';
   const entries = {
+    RESTING: ['observation', 'Person is on the ground by choice — resting posture, monitoring continues.'],
     RAPID_DESCENT: ['warning', 'Rapid downward movement detected.'],
     GROUND: ['warning', 'Possible fall detected — person reached a horizontal ground-level posture.'],
     IMMOBILE: ['inference', 'Person remains on ground with low movement.'],
@@ -268,6 +297,11 @@ function syncState(people, now) {
     const previous = previousFallState.get(person.trackingId);
     if (previous !== person.fallState) handleFallTransition(person, previous, score);
     previousFallState.set(person.trackingId, person.fallState);
+    handleActivityTransition(person, previousActivity.get(person.trackingId));
+    previousActivity.set(person.trackingId, person.activity);
+    // RESTING is deliberately absent: somebody lying down on purpose is not an
+    // incident. If their stillness later stops making sense the fall detector
+    // moves them to IMMOBILE and an incident opens then.
     if (['GROUND', 'IMMOBILE', 'POSSIBLE_DISTRESS', 'RECOVERY'].includes(person.fallState)) {
       upsertLocalIncident(person, score);
     }
@@ -298,9 +332,14 @@ function syncState(people, now) {
     || guardianState.focusPersonId !== person.trackingId
     || guardianState.eventLabel !== person.label) {
     setGuardianScore(score, {
-      eventType: person.fallState === 'NORMAL' ? 'normal'
+      eventType: person.fallState === 'NORMAL' || person.fallState === 'RESTING' ? 'normal'
         : person.fallState === 'POSSIBLE_DISTRESS' ? 'distress' : 'fall',
-      eventLabel: person.label,
+      // "Possible event" is about concern, not activity: with nothing
+      // concerning happening it says so, and the Activity readout beside it
+      // carries what the person appears to be doing.
+      eventLabel: person.fallState === 'NORMAL' || person.fallState === 'RESTING'
+        ? 'None observed'
+        : person.label,
       focusPersonId: person.trackingId
     });
   }
@@ -309,7 +348,10 @@ function syncState(people, now) {
   }
   setFeatures(person.features);
   setAssessment({
-    motionState: person.features.motionMagnitude <= CONFIG.THRESHOLDS.immobileMotion ? 'Minimal' : 'Active',
+    // The readout says what the person appears to be doing; raw motion
+    // magnitude is already one cell along in the feature strip.
+    motionState: person.activityLabel
+      || (person.features.motionMagnitude <= CONFIG.THRESHOLDS.immobileMotion ? 'Minimal' : 'Active'),
     immobilitySeconds
   });
   updateLocalCamera(people.length, person.status, score);
@@ -356,6 +398,7 @@ function clearLocalAssessment({ stopCamera = false } = {}) {
   incidentByTrack.clear();
   incidentStartedAt.clear();
   previousFallState.clear();
+  previousActivity.clear();
   incidentSeq = 0;
   lastSignature = '';
   clearIncidents();

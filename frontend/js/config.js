@@ -145,7 +145,41 @@ export const CONFIG = {
     smallMovementBurstCount: 3,
     candidateTimeoutMs: 1900,
     recoveryTimeMs: 1200,
-    normaliseTimeMs: 900
+    normaliseTimeMs: 900,
+
+    /* --- Activity context (js/activity.js) ----------------------------------
+     * These separate an emergency from an ordinary day. Washing up, crouching
+     * to a low shelf, sitting, picking something off the floor and lying down
+     * all produce descents, low motion or horizontal postures — the exact
+     * signals a naive fall detector fires on.
+     */
+
+    /** An activity must hold this long before it is believed. */
+    activityConfirmationMs: 500,
+    /** Peak downward travel above which a descent reads as uncontrolled. */
+    controlledDescentSpeed: 0.55,
+    /**
+     * Hip-above-feet span, divided by the person's own size: ~0.5 standing,
+     * ~0.3 seated, ~0.15 in a deep crouch, ~0 lying flat. Scale-free, so it
+     * works at any distance from the camera.
+     */
+    seatedSpan: 0.32,
+    crouchSpan: 0.18,
+    /** Knee angle at or above which the legs are still extended. */
+    reachingKneeFlexion: 140,
+    /** Foot travel at or below which the feet count as planted. */
+    plantedFeetMotion: 0.05,
+    /** Arm motion above which the hands are busy. */
+    taskArmMotion: 0.06,
+    /** Torso motion at or below which the body itself is parked. */
+    taskTorsoMotion: 0.035,
+
+    /**
+     * A person who lowered themselves to the floor under their own control is
+     * resting, not collapsed — but stillness that outlasts any plausible rest
+     * is worth a look. This is deliberately far longer than distressTimeMs.
+     */
+    restingEscalationMs: 45000
   },
 
   TIMELINE_LIMIT: 60,

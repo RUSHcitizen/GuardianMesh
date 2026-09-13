@@ -12,6 +12,7 @@
  */
 
 import { CONFIG } from './config.js';
+import { ACTIVITIES, createActivityMonitor } from './activity.js';
 import { createFallDetector, presentationForFallState } from './fall-detector.js';
 import { clamp, lerp } from './util.js';
 
@@ -49,12 +50,29 @@ export function createPoseEngine() {
         descentDistance: 0,
         aspectRatioChange: 0,
         groundSignal: false,
-        smallMovementBurstCount: 0
+        smallMovementBurstCount: 0,
+        // posture and activity signals (see js/activity.js)
+        armMotion: 0,
+        legMotion: 0,
+        torsoMotion: 0,
+        feetTravel: 0,
+        kneeFlexion: 180,
+        // null until the feet are actually visible — see the note in activity.js
+        hipToAnkleSpan: null,
+        descentPeakSpeed: 0,
+        bodyScale: 0.5
       },
       _prev: null,
       _history: [],
       _smoothMotion: 0,
+      _smoothArm: 0,
+      _smoothLeg: 0,
+      _smoothTorso: 0,
+      _smoothFeet: 0,
       _fallDetector: createFallDetector(),
+      _activity: createActivityMonitor(),
+      activity: ACTIVITIES.UNKNOWN,
+      activityLabel: 'Assessing movement',
       fallState: 'NORMAL',
       poseConfidence: 0,
       assessmentSource: 'local',
@@ -96,6 +114,55 @@ export function createPoseEngine() {
     ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
     : a || b || null;
 
+  /** Keypoint groups whose motion is tracked separately (see below). */
+  const ARM_POINTS = ['left_elbow', 'right_elbow', 'left_wrist', 'right_wrist'];
+  const LEG_POINTS = ['left_knee', 'right_knee', 'left_ankle', 'right_ankle'];
+  const TORSO_POINTS = ['left_shoulder', 'right_shoulder', 'left_hip', 'right_hip'];
+  const FOOT_POINTS = ['left_ankle', 'right_ankle'];
+
+  const visible = (p) => p && (p.confidence ?? 1) >= CONFIG.POSE_MODEL.minLandmarkVisibility;
+
+  /** Mean per-point displacement of a named group, in normalised units/second. */
+  function groupSpeed(names, byName, prev, dt) {
+    let sum = 0;
+    let count = 0;
+    for (const name of names) {
+      const now = byName[name];
+      const was = prev?.[name];
+      if (!visible(now) || !visible(was)) continue;
+      sum += Math.hypot(now.x - was.x, now.y - was.y);
+      count += 1;
+    }
+    return count ? (sum / count) / dt : null;
+  }
+
+  /**
+   * Interior angle at the knee, in degrees: 180 is a straight leg, smaller is
+   * more bent. Separates a crouch (bent knees, upright torso) from bending at
+   * the waist (straighter knees, pitched torso) — two postures that look
+   * almost identical if you only measure how low the body's centre is.
+   */
+  function kneeFlexionOf(byName) {
+    const angles = [];
+    for (const side of ['left', 'right']) {
+      const hip = byName[`${side}_hip`];
+      const knee = byName[`${side}_knee`];
+      const ankle = byName[`${side}_ankle`];
+      if (!visible(hip) || !visible(knee) || !visible(ankle)) continue;
+      const ax = hip.x - knee.x, ay = hip.y - knee.y;
+      const bx = ankle.x - knee.x, by = ankle.y - knee.y;
+      const la = Math.hypot(ax, ay), lb = Math.hypot(bx, by);
+      if (la < 1e-5 || lb < 1e-5) continue;
+      angles.push(Math.acos(clamp((ax * bx + ay * by) / (la * lb), -1, 1)) * (180 / Math.PI));
+    }
+    return angles.length ? angles.reduce((a, b) => a + b, 0) / angles.length : null;
+  }
+
+  const meanY = (names, byName) => {
+    const ys = names.map((n) => byName[n]).filter(visible).map((p) => p.y);
+    return ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : null;
+  };
+
   /** Derive temporal features from consecutive observed keypoint samples. */
   function deriveFeatures(track, points, dtMs) {
     const byName = Object.fromEntries(points.map((p) => [p.name, p]));
@@ -136,6 +203,20 @@ export function createPoseEngine() {
     }
 
     track._smoothMotion = lerp(track._smoothMotion, motion, MOTION_SMOOTHING);
+
+    // Motion split by body part. A person at a sink is nearly still from the
+    // hips down while their arms move constantly; a fall moves everything at
+    // once. One averaged motion number cannot tell those apart.
+    const prevByName = track._prev?.byName;
+    const arm = groupSpeed(ARM_POINTS, byName, prevByName, dt);
+    const leg = groupSpeed(LEG_POINTS, byName, prevByName, dt);
+    const torso = groupSpeed(TORSO_POINTS, byName, prevByName, dt);
+    const feet = groupSpeed(FOOT_POINTS, byName, prevByName, dt);
+    if (arm !== null) track._smoothArm = lerp(track._smoothArm, arm, MOTION_SMOOTHING);
+    if (leg !== null) track._smoothLeg = lerp(track._smoothLeg, leg, MOTION_SMOOTHING);
+    if (torso !== null) track._smoothTorso = lerp(track._smoothTorso, torso, MOTION_SMOOTHING);
+    if (feet !== null) track._smoothFeet = lerp(track._smoothFeet, feet, MOTION_SMOOTHING);
+
     track._prev = { centerY, byName };
 
     const b = track.boundingBox || boundsOf(points);
@@ -145,6 +226,19 @@ export function createPoseEngine() {
     track._history = track._history.filter((sample) => sample.t >= cutoff);
     const baseline = track._history.reduce((best, sample) =>
       sample.centerY < best.centerY ? sample : best, track._history[0]);
+    // Fastest downward travel inside the window. A fall spikes; sitting or
+    // lying down deliberately stays gentle even over the same total distance.
+    let peakDescent = 0;
+    for (let i = 1; i < track._history.length; i += 1) {
+      const span = (track._history[i].t - track._history[i - 1].t) / 1000;
+      if (span <= 0) continue;
+      const speed = (track._history[i].centerY - track._history[i - 1].centerY) / span;
+      if (speed > peakDescent) peakDescent = speed;
+    }
+
+    const ankleY = meanY(FOOT_POINTS, byName);
+    const bodyScale = Math.max(b.height, b.width, 0.05);
+    const knee = kneeFlexionOf(byName);
 
     const f = track.features;
     f.verticalVelocity = verticalVelocity;
@@ -158,6 +252,19 @@ export function createPoseEngine() {
     f.boundingBoxBottom = b.y + b.height;
     f.descentDistance = Math.max(0, centerY - (baseline?.centerY ?? centerY));
     f.aspectRatioChange = Math.max(0, ratio - (baseline?.ratio ?? ratio));
+    f.armMotion = track._smoothArm;
+    f.legMotion = track._smoothLeg;
+    f.torsoMotion = track._smoothTorso;
+    f.feetTravel = track._smoothFeet;
+    f.descentPeakSpeed = peakDescent;
+    f.bodyScale = bodyScale;
+    if (knee !== null) f.kneeFlexion = knee;
+    // Scale-free "how far are the hips above the feet": ~0.5 standing, ~0.3
+    // seated, ~0.15 crouching, at or below 0 lying flat. Works at any distance
+    // because it is divided by the person's own size. Stays null when the feet
+    // are out of shot (a desk webcam often sees only head and torso) so that
+    // activity.js can treat it as unknown rather than assume "standing".
+    f.hipToAnkleSpan = ankleY !== null ? (ankleY - hipY) / bodyScale : null;
     f.groundSignal = f.centerY >= CONFIG.THRESHOLDS.groundCenterY
       && f.boundingBoxBottom >= CONFIG.THRESHOLDS.groundBottomY
       && (bodyAngle >= CONFIG.THRESHOLDS.torsoHorizontalAngle
@@ -176,12 +283,22 @@ export function createPoseEngine() {
   function advance(track, dtMs) {
     advanceDurations(track, dtMs);
     if (track.assessmentSource !== 'local') return;
-    const assessment = track._fallDetector.update(track.features, dtMs);
+
+    // Activity first: the fall state machine needs to know whether a descent
+    // is something the person is doing or something happening to them.
+    const context = track._activity.update(track.features, dtMs);
+    track.activity = context.activity;
+    track.activityLabel = context.label;
+
+    const assessment = track._fallDetector.update(track.features, dtMs, context.activity);
     track.features.smallMovementBurstCount = assessment.smallMovementBurstCount;
     track.fallState = assessment.state;
     const presentation = presentationForFallState(assessment.state, track.poseConfidence);
     track.status = presentation.status;
-    track.label = presentation.label;
+    // With nothing concerning happening, say what the person appears to be
+    // doing rather than a flat "Normal motion" — it is more informative and it
+    // shows the operator the system is reading the scene, not just idling.
+    track.label = assessment.state === 'NORMAL' ? context.label : presentation.label;
     track.confidence = presentation.confidence;
   }
 
@@ -212,6 +329,8 @@ export function createPoseEngine() {
       confidence: track.confidence,
       score: track.score,
       fallState: track.fallState,
+      activity: track.activity,
+      activityLabel: track.activityLabel,
       poseConfidence: track.poseConfidence,
       boundingBox: track.boundingBox,
       keypoints: track.keypoints,

@@ -3,9 +3,15 @@
  *
  * It consumes observable pose/motion features only. It does not diagnose a
  * medical condition and keeps no identity or biometric profile.
+ *
+ * It also takes the activity context from js/activity.js, because posture on
+ * its own is ambiguous: crouching, sitting, reaching to the floor and lying
+ * down to rest all look like the beginning of a fall if you only measure how
+ * low a body is. Activity decides whether a descent needs explaining.
  */
 
 import { CONFIG } from './config.js';
+import { ACTIVITIES } from './activity.js';
 
 export const FALL_STATES = Object.freeze({
   NORMAL: 'NORMAL',
@@ -14,7 +20,9 @@ export const FALL_STATES = Object.freeze({
   GROUND: 'GROUND',
   IMMOBILE: 'IMMOBILE',
   POSSIBLE_DISTRESS: 'POSSIBLE_DISTRESS',
-  RECOVERY: 'RECOVERY'
+  RECOVERY: 'RECOVERY',
+  /** On the floor, but arrived there under the person's own control. */
+  RESTING: 'RESTING'
 });
 
 const PRESENTATION = {
@@ -24,7 +32,8 @@ const PRESENTATION = {
   GROUND: { status: 'warning', label: 'Possible fall', confidence: 0.72 },
   IMMOBILE: { status: 'warning', label: 'Person remains on ground', confidence: 0.84 },
   POSSIBLE_DISTRESS: { status: 'critical', label: 'Possible collapse / distress', confidence: 0.93 },
-  RECOVERY: { status: 'observing', label: 'Recovery movement', confidence: 0.62 }
+  RECOVERY: { status: 'observing', label: 'Recovery movement', confidence: 0.62 },
+  RESTING: { status: 'normal', label: 'Resting on the ground', confidence: 0 }
 };
 
 export function presentationForFallState(state, poseConfidence = 1) {
@@ -37,6 +46,7 @@ export function presentationForFallState(state, poseConfidence = 1) {
 
 export function createFallDetector(thresholds = CONFIG.THRESHOLDS) {
   let state = FALL_STATES.NORMAL;
+  let restingMs = 0;
   let stateElapsedMs = 0;
   let uprightElapsedMs = 0;
   let descentEvidenceMs = 0;
@@ -53,7 +63,12 @@ export function createFallDetector(thresholds = CONFIG.THRESHOLDS) {
     return true;
   }
 
-  function update(features, dtMs) {
+  /**
+   * @param {object} features pose-engine features
+   * @param {number} dtMs
+   * @param {string} [activity] current ACTIVITIES value from js/activity.js
+   */
+  function update(features, dtMs, activity = ACTIVITIES.UNKNOWN) {
     const dt = Math.max(0, Math.min(Number(dtMs) || 0, 120));
     elapsedMs += dt;
     stateElapsedMs += dt;
@@ -63,7 +78,12 @@ export function createFallDetector(thresholds = CONFIG.THRESHOLDS) {
     // A single noisy pose frame must never look like a fall. Fast movement is
     // meaningful only when the torso also travels a minimum distance; a larger
     // multi-frame displacement can stand on its own.
-    const descentSample = descentDistance >= thresholds.rapidDropDistance
+    // Distance alone is not evidence of a fall: lowering yourself to the floor
+    // covers the same ground as dropping to it. The descent must also have been
+    // fast at some point. (Absent peak data the distance still stands, so a
+    // producer that supplies no descent profile behaves as before.)
+    const descentSample = (descentDistance >= thresholds.rapidDropDistance
+      && (features.descentPeakSpeed ?? Infinity) >= thresholds.controlledDescentSpeed)
       || (downwardSpeed >= thresholds.rapidDropVelocity
         && descentDistance >= thresholds.rapidDropMinDistance);
     const horizontal = (features.bodyAngle || 0) >= thresholds.torsoHorizontalAngle
@@ -76,6 +96,14 @@ export function createFallDetector(thresholds = CONFIG.THRESHOLDS) {
     const upright = (features.bodyAngle || 0) < thresholds.instabilityAngle
       && (features.boundingBoxRatio || 0) < thresholds.horizontalBoxRatio
       && !nearGround;
+
+    // Postures the person put themselves into. These never start an incident,
+    // which is what keeps crouching to a cupboard, sitting down, picking
+    // something off the floor and lying down out of the incident feed.
+    const deliberate = activity === ACTIVITIES.REACHING_DOWN
+      || activity === ACTIVITIES.CROUCHING
+      || activity === ACTIVITIES.SITTING;
+    const settledOnGround = activity === ACTIVITIES.LYING_SETTLED;
 
     uprightElapsedMs = upright ? uprightElapsedMs + dt : 0;
     descentEvidenceMs = descentSample ? descentEvidenceMs + dt : 0;
@@ -105,16 +133,34 @@ export function createFallDetector(thresholds = CONFIG.THRESHOLDS) {
     const repeatedSmallMovements = smallMovementBursts.length
       >= thresholds.smallMovementBurstCount;
 
+    restingMs = state === FALL_STATES.RESTING ? restingMs + dt : 0;
+
     switch (state) {
       case FALL_STATES.NORMAL:
-        if (rapidDescent) transition(FALL_STATES.RAPID_DESCENT);
+        // A descent the person is driving needs no explanation. Bending to a
+        // low shelf pitches the torso exactly like the start of a fall does.
+        if (deliberate) break;
+        if (settledOnGround) transition(FALL_STATES.RESTING);
+        else if (rapidDescent) transition(FALL_STATES.RAPID_DESCENT);
         else if (instability) {
           transition(FALL_STATES.INSTABILITY);
         }
         break;
 
+      case FALL_STATES.RESTING:
+        // Lying down is normal. Lying still for far longer than resting
+        // explains is not, so the evidence keeps accumulating quietly.
+        if (!grounded && (upright || recoveryMotion)) transition(FALL_STATES.RECOVERY);
+        else if (activity === ACTIVITIES.LYING_SUDDEN) transition(FALL_STATES.GROUND);
+        else if (lowMotion && restingMs >= thresholds.restingEscalationMs) {
+          transition(FALL_STATES.IMMOBILE);
+        }
+        break;
+
       case FALL_STATES.INSTABILITY:
-        if (rapidDescent) transition(FALL_STATES.RAPID_DESCENT);
+        if (deliberate) transition(FALL_STATES.NORMAL);
+        else if (settledOnGround) transition(FALL_STATES.RESTING);
+        else if (rapidDescent) transition(FALL_STATES.RAPID_DESCENT);
         else if (grounded && (features.descentDistance || 0) >= thresholds.rapidDropDistance * 0.7) {
           transition(FALL_STATES.GROUND);
         } else if (uprightElapsedMs >= thresholds.normaliseTimeMs
@@ -124,7 +170,8 @@ export function createFallDetector(thresholds = CONFIG.THRESHOLDS) {
         break;
 
       case FALL_STATES.RAPID_DESCENT:
-        if (grounded && (features.groundDurationMs || 0) >= thresholds.groundConfirmationMs) {
+        if (settledOnGround) transition(FALL_STATES.RESTING);
+        else if (grounded && (features.groundDurationMs || 0) >= thresholds.groundConfirmationMs) {
           transition(FALL_STATES.GROUND);
         } else if (uprightElapsedMs >= thresholds.normaliseTimeMs
           || stateElapsedMs >= thresholds.candidateTimeoutMs) {
@@ -134,6 +181,7 @@ export function createFallDetector(thresholds = CONFIG.THRESHOLDS) {
 
       case FALL_STATES.GROUND:
         if (!grounded && (upright || recoveryMotion)) transition(FALL_STATES.RECOVERY);
+        else if (settledOnGround) transition(FALL_STATES.RESTING);
         else if (lowMotion && (features.timeSinceMovementMs || 0) >= thresholds.immobilityTimeMs) {
           transition(FALL_STATES.IMMOBILE);
         }
@@ -154,7 +202,8 @@ export function createFallDetector(thresholds = CONFIG.THRESHOLDS) {
         break;
 
       case FALL_STATES.RECOVERY:
-        if (grounded && lowMotion) transition(FALL_STATES.GROUND);
+        if (settledOnGround) transition(FALL_STATES.RESTING);
+        else if (grounded && lowMotion) transition(FALL_STATES.GROUND);
         else if (uprightElapsedMs >= thresholds.recoveryTimeMs) transition(FALL_STATES.NORMAL);
         break;
 
@@ -165,6 +214,9 @@ export function createFallDetector(thresholds = CONFIG.THRESHOLDS) {
     return {
       state,
       stateElapsedMs,
+      activity,
+      deliberate,
+      restingMs,
       rapidDescent,
       instability,
       horizontal,
@@ -179,6 +231,7 @@ export function createFallDetector(thresholds = CONFIG.THRESHOLDS) {
 
   function reset() {
     state = FALL_STATES.NORMAL;
+    restingMs = 0;
     stateElapsedMs = 0;
     uprightElapsedMs = 0;
     descentEvidenceMs = 0;

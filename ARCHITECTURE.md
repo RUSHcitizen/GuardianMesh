@@ -16,6 +16,7 @@ origin, so the page depends on no CDN.
 │  camera.js ── browser-pose.js (YOLO26-pose via ONNX Runtime) │
 │           └── pose-overlay.js (yellow detection boxes)       │
 │  pose-engine.js → tracks + temporal feature derivation       │
+│  activity.js → what the person appears to be doing           │
 │  fall-detector.js → per-person temporal state machine        │
 └──────────────────────────┬───────────────────────────────────┘
                            │ person records (normalised 0..1)
@@ -63,7 +64,8 @@ Two structural rules enforce this, and both are visible in the import graph:
 ```
 app.js ─┬─ camera.js ───────── pose-overlay.js
         ├─ browser-pose.js ─── vendor/onnxruntime + assets/models/yolo26n-pose.onnx
-        ├─ pose-engine.js ──── fall-detector.js
+        ├─ pose-engine.js ─┬── activity.js
+        │                  └── fall-detector.js ─── activity.js
         ├─ datasource.js ─┬─ websocket.js
         │                 └─ data/mock-events.js
         ├─ guardian-score.js ────────────── data/mock-events.js
@@ -152,8 +154,15 @@ and the panel eases the displayed number toward it each frame.
 
 ```
 camera frame → letterbox 640x640 → YOLO26-pose → decode rows → anonymous track
-             match → temporal features → fall state machine
+             match → temporal features → activity context → fall state machine
              → Guardian Score / timeline / incidents
+
+Activity runs *before* the fall state machine and is passed into it, because a
+descent means different things depending on what the person is doing. Crouching
+to a cupboard, sitting, reaching to the floor and lying down to rest all produce
+fall-shaped signals; the activity layer is what stops each of them opening an
+incident, without weakening the response to a real collapse. See README for the
+table of activities and the three signals that separate them.
 ```
 
 ### The coordinate contract

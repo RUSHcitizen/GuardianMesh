@@ -62,7 +62,8 @@ export function computeGuardianScore(f, fallState = 'NORMAL') {
     GROUND: 5.5,
     IMMOBILE: 7.0,
     POSSIBLE_DISTRESS: 8.6,
-    RECOVERY: 3.0
+    RECOVERY: 3.0,
+    RESTING: 0
   }[fallState] ?? 0;
   score = Math.max(score, floor);
 
@@ -71,6 +72,11 @@ export function computeGuardianScore(f, fallState = 'NORMAL') {
   // unconfirmed lean stays below the Elevated band.
   if (fallState === 'NORMAL') score = Math.min(score, 1.9);
   if (fallState === 'INSTABILITY') score = Math.min(score, 2.9);
+  // Somebody who lowered themselves to the floor is on the floor on purpose.
+  // The ground-level and immobility terms above would otherwise climb for as
+  // long as they lie there, so cap it: RESTING has its own, much longer
+  // escalation path in the fall detector if the stillness stops making sense.
+  if (fallState === 'RESTING') score = Math.min(score, 1.5);
 
   return clamp(round(score, 1), 0, 10);
 }
@@ -155,6 +161,8 @@ export function createScorePanel() {
     roPerson.textContent = state.focusPersonId || '—';
     roImmobility.textContent = formatSeconds(state.immobilitySeconds);
     roMotion.textContent = state.motionState;
+    // An activity the person chose is reassuring, not a warning; only stillness
+    // that nothing explains is worth colouring.
     roMotion.dataset.status = state.motionState === 'Minimal' ? 'warning' : 'normal';
   }
 

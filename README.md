@@ -80,6 +80,55 @@ with `?ep=wasm` or `?ep=webgpu`. Threads need cross-origin isolation, which
 which is source-available, but it is worth knowing before reusing the model in a
 closed-source product.
 
+### Activity context — telling an emergency from an ordinary day
+
+Posture on its own is ambiguous. Washing up, crouching to a low shelf, sitting
+down, picking something off the floor and lying down to rest all produce
+descents, low bodies, horizontal postures or stillness — the exact signals a
+naive fall detector fires on. `frontend/js/activity.js` classifies what a person
+appears to be **doing**, and the fall state machine uses it to decide whether a
+descent needs explaining:
+
+| Observed activity | What identifies it | Effect |
+|---|---|---|
+| Standing / Walking | Upright, whole-body motion | — |
+| Stationary task | Arms moving while torso and feet stay put | — |
+| Reaching down | Pitched forward, legs extended, feet planted, hips still high | No incident |
+| Crouching | Hips folded down near the feet, torso upright | No incident |
+| Sitting | Hips lowered but clearly above the feet, torso upright | No incident |
+| Lying down | Horizontal at floor level, reached **gradually** | `RESTING`, no incident |
+| Went down suddenly | Same posture, reached **fast** | Escalates as a fall |
+
+Three ideas do the work:
+
+1. **Hip-above-feet span**, divided by the person's own size — about 0.5
+   standing, 0.3 seated, 0.15 crouching, at or below 0 lying flat. This is what
+   separates a body that has gone *down* from one that has merely *folded
+   forward*, which no measure of height-in-frame can do. It is scale-free, so it
+   works at any distance from the camera.
+2. **Motion split by body part.** A person at a sink is nearly still from the
+   hips down while their arms move constantly; a fall moves everything at once.
+   One averaged motion number cannot tell those apart.
+3. **Peak descent speed, not distance.** Lowering yourself to the floor covers
+   the same ground as dropping to it. Speed is what differs.
+
+Two cases are handled deliberately rather than by accident:
+
+- **A collapse cannot re-label itself.** Descent speed ages out of the feature
+  window within a second, so without a latch a real fall would quietly become
+  "lying down" and cancel its own incident. Once a descent is seen as abrupt it
+  stays abrupt until the person gets up.
+- **Resting still escalates, eventually.** Lying down is normal; lying
+  motionless for far longer than resting explains is not. `RESTING` has its own
+  much longer escalation window (`restingEscalationMs`, 45 s) rather than being
+  ignored forever.
+- **Feet out of shot never invent an explanation.** A desk webcam often sees
+  only head and torso. An unknown span rules *out* "reaching down" and
+  "crouching" — but never blocks a fall.
+
+`tests/activity.test.mjs` pins all of this: six postures, four gated out of the
+incident feed, both escalation paths, the latch, and the feet-out-of-frame case.
+
 The detector is the only computer vision model. Everything after pose estimation
 is rule-based, with hand-set thresholds rather than a trained classifier:
 
@@ -216,6 +265,7 @@ frontend/
 │   ├── camera.js            camera stage: webcam / video file, error states
 │   ├── browser-pose.js      YOLO26-pose via ONNX Runtime Web + anonymous multi-person tracking
 │   ├── fall-detector.js     temporal fall state machine
+│   ├── activity.js          observable activity context (task/crouch/sit/lying)
 │   ├── pose-engine.js       temporal feature derivation over observed keypoints
 │   ├── pose-overlay.js      yellow anonymous person-detection boxes
 │   ├── guardian-score.js    Guardian Score panel + live severity model
