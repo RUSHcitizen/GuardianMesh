@@ -36,7 +36,7 @@
 }
 
 #guardian-video { object-fit: cover; background: var(--bg-stage); }
-#guardian-video[hidden], #scene-canvas[hidden] { display: none; }
+#guardian-video[hidden] { display: none; }
 
 #pose-overlay { pointer-events: none; z-index: 3; }
 

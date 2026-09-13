@@ -17,10 +17,11 @@ hardware context, not contributor attribution.
 
 - `frontend/` is a static vanilla-JavaScript dashboard deployed as Cloudflare
   Worker static assets.
-- The default demo uses browser-side MediaPipe pose inference. Do not silently
-  replace camera/model failures with simulated people.
-- Scripted data is development-only and must remain behind
-  `?dev=simulation`.
+- The demo uses browser-side YOLO26-pose inference through ONNX Runtime Web,
+  with the model and runtime served from this origin. Do not silently replace
+  camera/model failures with simulated people.
+- There is no scripted/simulated data path, and no synthetic pose source. Do not
+  reintroduce one: every track on screen must come from the camera.
 - `ai_cv/` contains the optional Python camera pipeline.
 - `backend/` contains the optional FastAPI event service. The default browser
   inference path does not require it.

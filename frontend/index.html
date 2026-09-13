@@ -53,7 +53,6 @@
           <span id="datasource-label">Initialising</span>
         </span>
         <button class="btn btn--primary" id="btn-demo-start" type="button">Start Live Camera</button>
-        <button class="btn" id="btn-demo-step" type="button" title="Advance to the next scripted step" hidden>Next Step</button>
         <button class="btn btn--ghost" id="btn-demo-reset" type="button">Reset</button>
       </div>
     </header>
@@ -75,7 +74,6 @@
 
         <div class="panel__body">
           <div class="camera-stage" id="camera-stage" data-status="normal">
-            <canvas id="scene-canvas" class="camera-stage__media" aria-hidden="true"></canvas>
             <video id="guardian-video" class="camera-stage__media" autoplay muted playsinline hidden></video>
             <canvas id="pose-overlay" role="img"
                     aria-label="Computer vision overlay showing anonymous person detection boxes"></canvas>
@@ -105,7 +103,6 @@
               <div class="hud-row hud-row--bottom">
                 <span class="hud-chip" id="hud-tracks">Tracks · <strong>0</strong></span>
                 <div class="camera-sources" role="group" aria-label="Camera source">
-                  <button class="btn btn--sm" type="button" id="src-simulated" aria-pressed="false" hidden>DEV Simulation</button>
                   <button class="btn btn--sm" type="button" id="src-webcam" aria-pressed="false">Webcam</button>
                   <button class="btn btn--sm" type="button" id="src-file" aria-pressed="false">Video Test</button>
                 </div>

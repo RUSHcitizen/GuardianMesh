@@ -1,25 +1,23 @@
 /**
  * GuardianMesh — camera stage controller.
  *
- * Owns the three stacked layers of the hero panel:
- *   scene canvas  (simulated feed)  →  <video> (webcam / file)  →  overlay canvas
+ * Owns the two stacked layers of the hero panel:
+ *   <video> (webcam / recorded file)  →  overlay canvas
  *
- * Live camera errors remain visible and never fall back to simulation. The
- * deterministic scene is reachable only through the explicit DEV flag.
+ * There is no synthetic feed. A camera that fails says so and stays failed:
+ * a dashboard that silently invents detections is worse than one that stops.
  */
 
 import { CONFIG } from './config.js';
-import { createScene } from './scene.js';
 import { createPoseOverlay } from './pose-overlay.js';
 import { $, show, clamp } from './util.js';
 
-export function createCamera(refs, { allowSimulation = false } = {}) {
-  const { stage, video, sceneCanvas, overlayCanvas } = refs;
-  const scene = createScene(sceneCanvas);
+export function createCamera(refs) {
+  const { stage, video, overlayCanvas } = refs;
   const overlay = createPoseOverlay(overlayCanvas);
 
   // Layers that must zoom together so the auto-focus stays visually registered.
-  const focusLayers = [sceneCanvas, video, overlayCanvas];
+  const focusLayers = [video, overlayCanvas];
   for (const layer of focusLayers) {
     layer.style.transition = 'transform 500ms ease, transform-origin 500ms ease';
   }
@@ -30,7 +28,7 @@ export function createCamera(refs, { allowSimulation = false } = {}) {
   const stateHint = $('#stage-state-hint');
   const feedState = $('#hud-feed-state');
 
-  let mode = 'off'; // off | simulated(dev only) | webcam | file
+  let mode = 'off'; // off | webcam | file
   let cameraStatus = 'off';
   let lastError = '';
   let stream = null;
@@ -78,7 +76,6 @@ export function createCamera(refs, { allowSimulation = false } = {}) {
     video.removeAttribute('src');
     video.srcObject = null;
     video.hidden = true;
-    sceneCanvas.hidden = true;
     mode = 'off';
     cameraStatus = 'off';
     lastError = '';
@@ -87,27 +84,6 @@ export function createCamera(refs, { allowSimulation = false } = {}) {
     showStageState('Camera off', 'Press Start Live Camera to begin local pose detection.');
     setFeedLabel('Camera off', 'offline');
     emit();
-  }
-
-  function useSimulated() {
-    if (!allowSimulation) {
-      console.warn('[guardian] simulated feed is disabled outside /?dev=simulation.');
-      return false;
-    }
-    stopStream();
-    video.removeAttribute('src');
-    video.srcObject = null;
-    video.hidden = true;
-    sceneCanvas.hidden = false;
-    mode = 'simulated';
-    cameraStatus = 'live';
-    lastError = '';
-    overlay.setContentSource(null);
-    hideStageState();
-    setFeedLabel('Simulated feed', 'active');
-    clearFocus();
-    emit();
-    return true;
   }
 
   async function useWebcam() {
@@ -134,7 +110,6 @@ export function createCamera(refs, { allowSimulation = false } = {}) {
       stream = next;
       video.srcObject = next;
       video.hidden = false;
-      sceneCanvas.hidden = true;
       mode = 'webcam';
       await video.play().catch(() => {});
       cameraStatus = 'live';
@@ -149,7 +124,6 @@ export function createCamera(refs, { allowSimulation = false } = {}) {
       console.error('[guardian] webcam unavailable:', err);
       stopStream();
       video.hidden = true;
-      sceneCanvas.hidden = true;
       mode = 'off';
       cameraStatus = err?.name === 'NotAllowedError' ? 'denied' : 'error';
       lastError = cameraStatus === 'denied'
@@ -168,7 +142,6 @@ export function createCamera(refs, { allowSimulation = false } = {}) {
     video.src = url;
     video.loop = true;
     video.hidden = false;
-    sceneCanvas.hidden = true;
     mode = 'file';
     cameraStatus = 'starting';
     lastError = '';
@@ -255,13 +228,11 @@ export function createCamera(refs, { allowSimulation = false } = {}) {
   }
 
   function resize() {
-    scene.resize();
     overlay.resize();
-    overlay.setContentSource(mode === 'simulated' ? null : video);
+    overlay.setContentSource(video);
   }
 
-  function render(people, t) {
-    if (mode === 'simulated') scene.render(people, t);
+  function render(people) {
     overlay.render(people);
 
     const critical = people.find((p) => p.status === 'critical' && p.boundingBox);
@@ -281,7 +252,7 @@ export function createCamera(refs, { allowSimulation = false } = {}) {
   else useOff();
 
   return {
-    useOff, useSimulated, useWebcam, useFile, useVideoUrl,
+    useOff, useWebcam, useFile, useVideoUrl,
     setStatus, pulseCritical, render, resize, onChange,
     showStageState, hideStageState,
     overlay,

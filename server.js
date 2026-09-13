@@ -20,7 +20,12 @@ const TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  // A browser refuses to execute a module served as octet-stream, and
+  // WebAssembly.instantiateStreaming refuses anything but application/wasm.
+  '.wasm': 'application/wasm',
+  '.onnx': 'application/octet-stream',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
@@ -48,7 +53,11 @@ const server = http.createServer((req, res) => {
     }
     res.writeHead(200, {
       'Content-Type': TYPES[path.extname(filePath)] || 'application/octet-stream',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache',
+      // Mirrors frontend/_headers so local dev has the same cross-origin
+      // isolation as production; without it ONNX Runtime Web loses WASM threads.
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp'
     });
     res.end(data);
   });

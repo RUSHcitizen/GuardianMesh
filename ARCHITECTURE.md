@@ -4,7 +4,8 @@ How the command-center frontend is put together, and where to plug things in.
 For how to run it and the JSON contracts, see [README.md](README.md).
 
 Stack: HTML5, CSS3, vanilla JavaScript (ES modules). No framework or build
-step. The browser fetches the pinned MediaPipe Tasks runtime and pose model.
+step. The YOLO26-pose model and the ONNX Runtime Web build are served from this
+origin, so the page depends on no CDN.
 
 ---
 
@@ -12,7 +13,7 @@ step. The browser fetches the pinned MediaPipe Tasks runtime and pose model.
 
 ```
 ┌─ PERCEPTION ─────────────────────────────────────────────────┐
-│  camera.js ── browser-pose.js (MediaPipe Pose Landmarker)    │
+│  camera.js ── browser-pose.js (YOLO26-pose via ONNX Runtime) │
 │           └── pose-overlay.js (yellow detection boxes)       │
 │  pose-engine.js → tracks + temporal feature derivation       │
 │  fall-detector.js → per-person temporal state machine        │
@@ -29,7 +30,6 @@ step. The browser fetches the pinned MediaPipe Tasks runtime and pose model.
 
 ┌─ PRODUCERS ──────────────────────────────────────────────────┐
 │  app.js (local CV)  datasource.js ← websocket.js (backend)   │
-│  demo.js (explicit DEV simulation only)                      │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -39,32 +39,31 @@ step. The browser fetches the pinned MediaPipe Tasks runtime and pose model.
 
 ```
 Local CV ───┐
-DEV demo ───┼──► state.js actions ──► subscribers ──► renderers
-WebSocket ──┘    setGuardianScore, setConfidence, addTimelineEvent,
+WebSocket ──┴──► state.js actions ──► subscribers ──► renderers
+                 setGuardianScore, setConfidence, addTimelineEvent,
                  upsertIncident, setCameraStatus, setResponseState, …
 ```
 
-All producers write through the **same action functions**. No panel renderer
-branches on where data came from. The default producer is local browser CV;
-the scripted producer is reachable only through `?dev=simulation`.
+Both producers write through the **same action functions**. No panel renderer
+branches on where data came from. There is no third, synthetic producer: the
+scripted simulation and its canonical pose library were removed, so a track on
+screen is always something the camera saw.
 
 Two structural rules enforce this, and both are visible in the import graph:
 
-1. **Only `app.js`, `demo.js` and `datasource.js` import `state.js`.** Every
-   panel renderer is a pure function of the state object handed to it; it
-   cannot reach global state.
+1. **Only `app.js` and `datasource.js` import `state.js`.** Every panel renderer
+   is a pure function of the state object handed to it; it cannot reach global
+   state.
 2. **The perception layer never imports `state.js`.** `pose-engine`,
-   `pose-overlay`, `scene` and `camera` are a self-contained subsystem that the
-   render loop pulls from.
+   `pose-overlay`, `browser-pose` and `camera` are a self-contained subsystem
+   that the render loop pulls from.
 
 ### Module graph
 
 ```
 app.js ─┬─ camera.js ───────── pose-overlay.js
-        ├─ browser-pose.js ─── MediaPipe Tasks (remote, pinned)
-        ├─ pose-engine.js ─┬── data/pose-library.js
-        │                  └── fall-detector.js
-        ├─ demo.js ──────────────────────── data/mock-events.js
+        ├─ browser-pose.js ─── vendor/onnxruntime + assets/models/yolo26n-pose.onnx
+        ├─ pose-engine.js ──── fall-detector.js
         ├─ datasource.js ─┬─ websocket.js
         │                 └─ data/mock-events.js
         ├─ guardian-score.js ────────────── data/mock-events.js
@@ -123,13 +122,13 @@ Adding a new producer means calling these — never touching a renderer.
 
 ## 4. One application animation loop
 
-`app.js` owns the application `requestAnimationFrame`; MediaPipe inference,
+`app.js` owns the application `requestAnimationFrame`; YOLO26 inference,
 feature derivation, overlay rendering, and panel animation all run from it.
 
 ```js
 frame(now):
-  landmarks = pose.detect(video, now) // interval-gated MediaPipe inference
-  engine.applyExternalTrack(landmarks)
+  pose.processFrame(now)     // interval-gated YOLO26 inference, async
+                             // → engine.applyExternalTrack() per detection
   people = engine.update(dt) // derive features + advance fall state machines
   camera.render(people, now) // real media + yellow detection boxes
   panels.score.tick(dt)      // ease the gauge toward its target
@@ -152,8 +151,9 @@ and the panel eases the displayed number toward it each frame.
 ## 5. Perception pipeline
 
 ```
-camera frame → MediaPipe landmarks → anonymous track match → temporal features
-             → fall state machine → Guardian Score / timeline / incidents
+camera frame → letterbox 640x640 → YOLO26-pose → decode rows → anonymous track
+             match → temporal features → fall state machine
+             → Guardian Score / timeline / incidents
 ```
 
 ### The coordinate contract
@@ -165,15 +165,18 @@ That one contract is why the media and AR overlay stay pixel-registered.
 it derives from the live media, including `object-fit: cover` letterboxing, so
 registration survives resize and source swaps.
 
-`engine.applyExternalTrack()` is the seam where local MediaPipe or an external
-CV producer enters the existing engine.
+`engine.applyExternalTrack()` is the seam where local YOLO26 output or an
+external CV producer enters the engine. Decoding YOLO26's rows into that
+contract is the one piece of model-specific arithmetic in the frontend, so it
+lives in two pure exported functions (`letterboxFor`, `decodeDetections`) and is
+pinned against real model output by `tests/yolo26-decode.test.mjs`.
 
 ### Camera sources
 
 `camera.js` starts off, then accepts an explicit webcam or picked-video choice.
 Failures (permission denied, no device, undecodable file) remain visible and do
-not silently create simulated people. Simulation is available only through the
-explicit development query flag.
+not silently create simulated people. There is no simulated source to fall back
+to: a dashboard that invents detections is worse than one that stops.
 
 ---
 
@@ -205,14 +208,16 @@ backend / websocket → datasource.js → normalised event → state actions →
   as 0..1 or 0..100.
 - `handleGuardianEvent()` switches on frame type (`status`, `cameras`,
   `tracks`, `timeline`, `response`, `corroboration`, or the main event) and
-  calls the same actions Demo Mode uses.
+  calls the same actions the local CV path uses.
 - `websocket.js` is pure transport with a bounded backoff ladder that
   terminates and reports `DISCONNECTED` rather than retrying forever.
 
 `CONFIG.BACKEND_ENABLED` is `false` by default, so the local browser inference
-path marks the backend **Not required**. The pinned MediaPipe runtime and model
-are the only default network fetches. Attach a separately deployed HTTPS/WSS
-backend with `window.guardian.connect()` or by flipping the flag.
+path needs no backend at all, and the status rail simply omits the Backend chip
+rather than reporting a permanent, alarming "Offline". The model and runtime are
+served from this origin, so the default page makes no third-party request.
+Attach a separately deployed HTTPS/WSS backend with `window.guardian.connect()`
+or by flipping the flag; the Backend chip appears when one is in play.
 
 ---
 
@@ -309,16 +314,16 @@ panels. Stage status takes the more severe of the classifier's status and the
 Guardian Score band, because a classifier may still call sustained immobility a
 warning after severity has reached the critical band.
 
-Attaching a live backend also clears the seeded demo cameras, sensors and
-people, so the mesh and overlay show only what the backend actually reports.
+Attaching a live backend also clears the locally detected cameras and people,
+so the mesh and overlay show only what the backend actually reports.
 Cameras the frontend has never heard of join the mesh on their first event.
 
 ### Choosing a data source
 
 | URL | Source |
 |---|---|
-| `/` | Real local MediaPipe model + live device camera |
-| `/?dev=simulation` | Explicit scripted development fixture |
+| `/` | Local YOLO26-pose model + live device camera |
+| `/?ep=wasm` or `/?ep=webgpu` | Force an ONNX Runtime execution provider |
 | `/?live` | Attach the live backend |
 | `/?live&token=…` | Attach a token-protected backend |
 
@@ -332,17 +337,16 @@ Cameras the frontend has never heard of join the mesh on their first event.
 | Feed a real backend | open `/?live`, or set `CONFIG.BACKEND_ENABLED` |
 | Point at another backend | `CONFIG.BACKEND_ORIGIN` / `WS_CLIENT_ID` / `ACCESS_TOKEN` |
 | Change live→UI behaviour | `js/live-director.js` |
-| Change the demo story | `js/demo.js` — the steps array |
-| Change any demo value | `data/mock-events.js` |
+| Change interface copy | `data/mock-events.js` |
 | Change severity maths | `computeGuardianScore()` in `js/guardian-score.js` |
 | Change thresholds/bands | `js/config.js` — `THRESHOLDS`, `SCORE_BANDS` |
-| Add a pose or body state | `data/pose-library.js` |
+| Swap the detector or its size | `CONFIG.POSE_MODEL` + `js/browser-pose.js` |
 | Re-skin | `styles/tokens.css` |
 | Add a panel | render function + one line in the `app.js` routing table |
 
-The two files most likely to churn during a hackathon — the demo script and the
-mock data — have zero imports into the rest of the system, so they can be
-edited without reading anything else.
+`CONFIG` and `data/mock-events.js` — the two files most likely to churn during a
+hackathon — have no imports into the rest of the system, so they can be edited
+without reading anything else.
 
 ---
 
@@ -353,10 +357,12 @@ edited without reading anything else.
 - **Renderers stay pure.** If a panel needs data, it arrives via state; it does
   not import `state.js`.
 - **One loop, no timers.** Anything periodic hangs off the `app.js` frame.
-- **Normalised coordinates at every boundary.** Pixels exist only inside
-  `scene.js` and `pose-overlay.js`.
-- **Demo Mode must work with the backend down.** That is the acceptance test
-  for any transport change.
+- **Normalised coordinates at every boundary.** Model pixels exist only inside
+  `browser-pose.js`; screen pixels only inside `pose-overlay.js`.
+- **The dashboard must work with the backend down.** Detection is local, so
+  that is the normal case, not a degraded one.
+- **Nothing on screen is ever synthetic.** If the camera or model fails, the
+  interface says so; it never substitutes invented people.
 - **Anonymous by construction.** Tracking IDs only — no identity field exists
   anywhere in the state shape or the event schema, and the language describes
   observable behaviour, never a medical diagnosis.

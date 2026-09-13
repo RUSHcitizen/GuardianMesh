@@ -1,71 +1,35 @@
 /**
  * GuardianMesh — pose & temporal-feature engine.
  *
- * Holds one record per anonymous track, interpolates between canonical body
- * poses, and derives the temporal movement features the reasoning layer uses:
- * vertical velocity, motion magnitude, body angle, ground duration and time
- * since movement.
+ * Holds one record per anonymous track and derives the temporal movement
+ * features the reasoning layer uses: vertical velocity, motion magnitude, body
+ * angle, descent distance, ground duration and time since movement.
  *
- * Real browser or backend CV supplies keypoints via `applyExternalTrack()`.
- * Canonical poses remain available only for the explicit DEV simulation.
+ * Every track originates from real computer vision — the in-browser YOLO26
+ * pose model, or a backend CV service — and arrives through
+ * `applyExternalTrack()`. The engine has no synthetic pose source: temporal
+ * reasoning is applied to observed keypoints or to nothing at all.
  */
 
-import { POSES, BODY_STATES, KEYPOINT_NAMES } from '../data/pose-library.js';
 import { CONFIG } from './config.js';
 import { createFallDetector, presentationForFallState } from './fall-detector.js';
-import { clamp, easeInOut, lerp } from './util.js';
+import { clamp, lerp } from './util.js';
 
-const GROUND_PIVOT = 0.86;    // y of the standing pose's feet — scale pivot
 const MOTION_SMOOTHING = 0.18;
-
-const clonePose = (p) => {
-  const out = {};
-  for (const name of KEYPOINT_NAMES) out[name] = { x: p[name].x, y: p[name].y };
-  return out;
-};
-
-function lerpPose(a, b, t) {
-  const out = {};
-  for (const name of KEYPOINT_NAMES) {
-    out[name] = { x: lerp(a[name].x, b[name].x, t), y: lerp(a[name].y, b[name].y, t) };
-  }
-  return out;
-}
-
-/** Pose for a body state at engine time `t` (ms). Cycles loop; others hold. */
-function statePose(stateName, t) {
-  const def = BODY_STATES[stateName] || BODY_STATES.standing;
-  if (!def.cycle) return POSES[def.pose];
-  const n = def.cycle.length;
-  const phase = ((t % def.periodMs) / def.periodMs) * n;
-  const i = Math.floor(phase);
-  return lerpPose(POSES[def.cycle[i]], POSES[def.cycle[(i + 1) % n]], easeInOut(phase - i));
-}
 
 export function createPoseEngine() {
   /** @type {Map<string, object>} */
   const tracks = new Map();
   let clock = 0;
 
-  function addTrack(spec) {
-    const bodyState = spec.bodyState || 'standing';
-    tracks.set(spec.trackingId, {
-      trackingId: spec.trackingId,
-      cameraId: spec.cameraId || 'CAM-02',
-      anchor: { ...(spec.anchor || { x: 0, y: 0 }) },
-      scale: spec.scale ?? 1,
-      drift: { ...(spec.drift || { x: 0, y: 0 }) },
-      driftAccum: { x: 0, y: 0 },
-      seed: spec.seed ?? Math.abs(hash(spec.trackingId)) % 1000,
+  function createTrack(trackingId, cameraId) {
+    tracks.set(trackingId, {
+      trackingId,
+      cameraId: cameraId || 'CAM-LIVE',
 
-      bodyState,
-      fromPose: clonePose(statePose(bodyState, 0)),
-      transitionStart: -1e9,
-      transitionMs: 1,
-
-      // presentation metadata shown by the AR overlay
-      status: spec.state || 'normal',
-      label: spec.label || 'Normal motion',
+      // presentation metadata shown by the detection overlay
+      status: 'normal',
+      label: 'Normal motion',
       confidence: null,
       score: null,
 
@@ -97,7 +61,7 @@ export function createPoseEngine() {
       keypoints: [],
       boundingBox: { x: 0, y: 0, width: 0, height: 0 }
     });
-    return tracks.get(spec.trackingId);
+    return tracks.get(trackingId);
   }
 
   function removeTrack(id) { tracks.delete(id); }
@@ -105,57 +69,10 @@ export function createPoseEngine() {
   function get(id) { return tracks.get(id); }
   function reset() { tracks.clear(); clock = 0; }
 
-  /** Transition a track to a new body state over `transitionMs`. */
-  function setBodyState(id, bodyState, transitionMs = 600) {
-    const track = tracks.get(id);
-    if (!track || !BODY_STATES[bodyState]) return;
-    track.fromPose = clonePose(localPose(track));
-    track.bodyState = bodyState;
-    track.transitionStart = clock;
-    track.transitionMs = Math.max(1, transitionMs);
-  }
-
   /** Update the overlay metadata (status colour, label, confidence, score). */
   function setMeta(id, meta) {
     const track = tracks.get(id);
     if (track) Object.assign(track, meta);
-  }
-
-  function setDrift(id, drift) {
-    const track = tracks.get(id);
-    if (track) track.drift = { ...track.drift, ...drift };
-  }
-
-  /** Current pose in local (un-placed) normalised space, including transition. */
-  function localPose(track) {
-    const target = statePose(track.bodyState, clock);
-    const k = clamp((clock - track.transitionStart) / track.transitionMs, 0, 1);
-    return k >= 1 ? target : lerpPose(track.fromPose, target, easeInOut(k));
-  }
-
-  /** Place a local pose into frame coordinates (scale pivots on the feet). */
-  function placePose(track, local, dtMs) {
-    const def = BODY_STATES[track.bodyState] || BODY_STATES.standing;
-    const sway = def.sway ?? 0.002;
-    const ox = track.anchor.x + track.driftAccum.x;
-    const oy = track.anchor.y + track.driftAccum.y;
-
-    const points = [];
-    KEYPOINT_NAMES.forEach((name, i) => {
-      const p = local[name];
-      // idle micro-movement keeps still poses from looking like frozen frames
-      const phase = (clock / 900) + (track.seed + i * 37) * 0.11;
-      const jx = Math.sin(phase) * sway;
-      const jy = Math.cos(phase * 0.8) * sway * 0.7;
-      points.push({
-        name,
-        x: clamp((p.x - 0.5) * track.scale + 0.5 + ox + jx, -0.2, 1.2),
-        y: clamp((p.y - GROUND_PIVOT) * track.scale + GROUND_PIVOT + oy + jy, -0.2, 1.2),
-        confidence: 0.9 + 0.09 * Math.sin(phase * 1.7)
-      });
-    });
-    void dtMs;
-    return points;
   }
 
   function boundsOf(points) {
@@ -179,7 +96,7 @@ export function createPoseEngine() {
     ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
     : a || b || null;
 
-  /** Derive temporal features from consecutive real or simulated samples. */
+  /** Derive temporal features from consecutive observed keypoint samples. */
   function deriveFeatures(track, points, dtMs) {
     const byName = Object.fromEntries(points.map((p) => [p.name, p]));
     const hips = midpoint(byName.left_hip, byName.right_hip);
@@ -256,7 +173,7 @@ export function createPoseEngine() {
       : 0;
   }
 
-  function advanceExternal(track, dtMs) {
+  function advance(track, dtMs) {
     advanceDurations(track, dtMs);
     if (track.assessmentSource !== 'local') return;
     const assessment = track._fallDetector.update(track.features, dtMs);
@@ -269,56 +186,22 @@ export function createPoseEngine() {
   }
 
   /**
-   * Advance all real or simulated tracks and return normalised person records.
+   * Advance every tracked person and return normalised person records.
    * @param {number} dtMs elapsed milliseconds since the previous call
    */
   function update(dtMs) {
     const dt = clamp(dtMs, 0, 120);
     clock += dt;
     const out = [];
-
     for (const track of tracks.values()) {
-      if (track.external) {
-        advanceExternal(track, dt);
-        out.push(externalRecord(track));
-        continue;
-      }
-
-      track.driftAccum.x += (track.drift.x || 0) * (dt / 1000);
-      track.driftAccum.y += (track.drift.y || 0) * (dt / 1000);
-      // wrap background walkers so they keep crossing the scene
-      const worldX = track.anchor.x + track.driftAccum.x;
-      if (worldX > 0.58) track.driftAccum.x -= 1.12;
-      if (worldX < -0.58) track.driftAccum.x += 1.12;
-
-      const points = placePose(track, localPose(track), dt);
-      track.keypoints = points;
-      track.boundingBox = boundsOf(points);
-      deriveFeatures(track, points, dt);
-      advanceDurations(track, dt);
+      advance(track, dt);
       out.push(record(track));
     }
     return out;
   }
 
   function record(track) {
-    return {
-      trackingId: track.trackingId,
-      cameraId: track.cameraId,
-      scale: track.scale,
-      status: track.status,
-      label: track.label,
-      confidence: track.confidence,
-      score: track.score,
-      bodyState: track.bodyState,
-      boundingBox: track.boundingBox,
-      keypoints: track.keypoints,
-      features: { ...track.features }
-    };
-  }
-
-  function externalRecord(track) {
-    // real CV tracks have no rig scale, so estimate one from the bounding box
+    // CV tracks have no rig scale, so estimate one from the bounding box
     const b = track.boundingBox || { width: 0, height: 0 };
     return {
       trackingId: track.trackingId,
@@ -328,7 +211,6 @@ export function createPoseEngine() {
       label: track.label,
       confidence: track.confidence,
       score: track.score,
-      bodyState: 'external',
       fallState: track.fallState,
       poseConfidence: track.poseConfidence,
       boundingBox: track.boundingBox,
@@ -343,14 +225,15 @@ export function createPoseEngine() {
    * @param {{trackingId:string, cameraId?:string, boundingBox?:object,
    *          keypoints:Array<{name:string,x:number,y:number,confidence?:number}>,
    *          status?:string, label?:string, confidence?:number, score?:number,
-   *          features?:object}} payload
+   *          poseConfidence?:number, features?:object}} payload
    * @param {number} dtMs
    */
   function applyExternalTrack(payload, dtMs = 33) {
-    let track = tracks.get(payload.trackingId);
-    if (!track) track = addTrack({ trackingId: payload.trackingId, cameraId: payload.cameraId });
-    track.external = true;
+    const track = tracks.get(payload.trackingId)
+      || createTrack(payload.trackingId, payload.cameraId);
     track.cameraId = payload.cameraId || track.cameraId;
+    // A producer that ships its own verdict owns the presentation; otherwise
+    // the local temporal state machine derives it from the features below.
     track.assessmentSource = payload.status !== undefined || payload.score !== undefined
       ? 'producer'
       : 'local';
@@ -372,14 +255,8 @@ export function createPoseEngine() {
     return track;
   }
 
-  function hash(str) {
-    let h = 0;
-    for (let i = 0; i < str.length; i += 1) h = (h * 31 + str.charCodeAt(i)) | 0;
-    return h;
-  }
-
   return {
-    addTrack, removeTrack, reset, has, get, setBodyState, setMeta, setDrift,
+    removeTrack, reset, has, get, setMeta,
     update, applyExternalTrack,
     get size() { return tracks.size; },
     get tracks() { return Array.from(tracks.values()); }

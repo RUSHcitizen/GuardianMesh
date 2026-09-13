@@ -83,8 +83,10 @@ export function createLiveDirector({ camera }) {
     const where = lead
       ? [lead.location, lead.cameraId].filter(Boolean).join(', ')
       : 'incident camera';
+    const who = lead?.trackingId || 'the tracked person';
     const list = stage === 'notified' ? RECOMMENDATIONS.critical : RECOMMENDATIONS.elevated;
-    setResponseState(stage, list.map((line) => line.replace('{location}', where)));
+    setResponseState(stage, list.map((line) =>
+      line.replace('{location}', where).replace('{person}', who)));
     const engaged = new Set(DISPATCH[stage] || []);
     for (const r of RESPONDERS) {
       setResponderState(r.id, engaged.has(r.id) ? stage : 'idle');

@@ -2,15 +2,14 @@
  * GuardianMesh — application bootstrap.
  *
  * One animation loop drives real browser pose inference, temporal features,
- * state actions, and the existing dashboard renderers. The scripted story is
- * available only at /?dev=simulation.
+ * state actions, and the dashboard renderers. There is no scripted story and
+ * no synthetic person: every track on screen came from the camera.
  */
 
 import { createBrowserPose } from './browser-pose.js';
 import { createCamera } from './camera.js';
 import { CONFIG } from './config.js';
 import { createDataSource } from './datasource.js';
-import { createDemo, seedBaseline } from './demo.js';
 import { createDeviceLocation } from './device-location.js';
 import { computeGuardianScore, createScorePanel } from './guardian-score.js';
 import { createIncidentFeed } from './incidents.js';
@@ -30,7 +29,6 @@ import {
 import { $, clamp, clockLabel, round } from './util.js';
 
 const params = new URLSearchParams(window.location.search);
-const devSimulation = params.get('dev') === CONFIG.DEV_SIMULATION_QUERY;
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
 const engine = createPoseEngine();
@@ -39,7 +37,7 @@ const camera = createCamera({
   video: $('#guardian-video'),
   sceneCanvas: $('#scene-canvas'),
   overlayCanvas: $('#pose-overlay')
-}, { allowSimulation: devSimulation });
+});
 
 const deviceLocation = createDeviceLocation();
 
@@ -50,7 +48,6 @@ const panels = {
 
 const game = createGamification();
 const dataSource = createDataSource({ engine });
-const demo = createDemo({ engine, camera });
 const liveDirector = createLiveDirector({ camera });
 
 const poseDetector = createBrowserPose({
@@ -59,7 +56,7 @@ const poseDetector = createBrowserPose({
   onStatus(status, detail) {
     update({ aiEngine: status, systemStatus: status === 'error' ? 'degraded' : 'online', modelError: detail || '' });
     if (status === 'error') {
-      camera.showStageState('AI model error', detail || 'MediaPipe Pose Landmarker could not load.');
+      camera.showStageState('AI model error', detail || 'The YOLO26 pose model could not load.');
     }
   },
   onInference({ latencyMs }) {
@@ -102,9 +99,6 @@ function renderDataSourceFlag(state) {
   if (state.backendStatus === 'connected') {
     flag.dataset.status = 'online';
     label.textContent = 'Live backend';
-  } else if (devSimulation) {
-    flag.dataset.status = demo.running ? 'observing' : 'idle';
-    label.textContent = demo.running ? 'DEV simulation running' : 'DEV simulation';
   } else if (state.aiEngine === 'error') {
     flag.dataset.status = 'offline';
     label.textContent = 'Local AI error';
@@ -327,8 +321,7 @@ let previousFrame = performance.now();
 function frame(now) {
   const dt = clamp(now - previousFrame, 0, 120);
   previousFrame = now;
-  if (devSimulation) demo.tick(now);
-  if (!devSimulation && guardianState.cameraStatus === 'live') poseDetector.processFrame(now);
+  if (guardianState.cameraStatus === 'live') poseDetector.processFrame(now);
   const people = engine.update(dt);
   syncState(people, now);
   camera.render(people, now);
@@ -339,11 +332,8 @@ function frame(now) {
 
 /* Controls. */
 const btnStart = $('#btn-demo-start');
-const btnStep = $('#btn-demo-step');
 const btnReset = $('#btn-demo-reset');
-const sourceButtons = {
-  simulated: $('#src-simulated'), webcam: $('#src-webcam'), file: $('#src-file')
-};
+const sourceButtons = { webcam: $('#src-webcam'), file: $('#src-file') };
 const fileInput = document.createElement('input');
 fileInput.type = 'file';
 fileInput.accept = 'video/*';
@@ -409,38 +399,19 @@ async function startLiveCamera() {
     update({ cameraStatus: 'live', aiEngine: 'ready', systemStatus: 'online' });
     addTimelineEvent({
       kind: 'system',
-      title: 'Live camera active — MediaPipe pose inference is running locally in this browser.',
+      title: `Live camera active — YOLO26 pose inference is running locally in this browser`
+        + `${poseDetector.backend ? ` on ${poseDetector.backend.toUpperCase()}` : ''}.`,
       facts: [{ label: 'Privacy', value: 'Frames stay on device' }]
     });
   }
 }
 
-btnStart.addEventListener('click', () => {
-  if (devSimulation) {
-    if (demo.running) demo.reset();
-    else demo.start();
-  } else startLiveCamera();
-});
-btnStep.addEventListener('click', () => demo.next());
+btnStart.addEventListener('click', () => startLiveCamera());
 btnReset.addEventListener('click', () => {
   liveDirector.reset();
-  if (devSimulation) {
-    panels.score.reset();
-    demo.reset();
-  } else clearLocalAssessment({ stopCamera: true });
+  clearLocalAssessment({ stopCamera: true });
 });
 
-demo.onStatus((status) => {
-  if (!devSimulation) return;
-  btnStart.textContent = status.running ? 'Restart DEV Simulation' : 'Start DEV Simulation';
-  btnStep.disabled = status.running && status.finished;
-  btnStep.title = status.nextStep ? `Next: ${status.nextStep}` : 'Simulation complete';
-  renderDataSourceFlag(guardianState);
-});
-
-sourceButtons.simulated.hidden = !devSimulation;
-btnStep.hidden = !devSimulation;
-sourceButtons.simulated.addEventListener('click', () => camera.useSimulated());
 sourceButtons.webcam.addEventListener('click', () => startLiveCamera());
 sourceButtons.file.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', async () => {
@@ -456,8 +427,8 @@ fileInput.addEventListener('change', async () => {
 camera.onChange(({ mode, status }) => {
   markSource(mode);
   update({ cameraStatus: status });
-  btnStart.textContent = !devSimulation && status === 'live' && mode === 'webcam'
-    ? 'Stop Camera' : devSimulation ? btnStart.textContent : 'Start Live Camera';
+  btnStart.textContent = status === 'live' && mode === 'webcam'
+    ? 'Stop Camera' : 'Start Live Camera';
 });
 
 $('#btn-timeline-clear').addEventListener('click', () => clearTimeline());
@@ -470,34 +441,25 @@ subscribe((state, changed) => {
 });
 window.addEventListener('keydown', (event) => {
   if (event.target.matches('input, textarea')) return;
-  if (event.key === 'd' || event.key === 'D') {
-    if (devSimulation) demo.start();
-    else startLiveCamera();
-  } else if (event.key === 'r' || event.key === 'R') btnReset.click();
-  else if (devSimulation && (event.key === 'n' || event.key === 'N')) demo.next();
+  if (event.key === 'd' || event.key === 'D') startLiveCamera();
+  else if (event.key === 'r' || event.key === 'R') btnReset.click();
 });
 window.addEventListener('resize', () => camera.resize());
 
 /* Boot. */
-if (devSimulation) {
-  seedBaseline({ engine, camera });
-  camera.useSimulated();
-  update({ dataSource: 'demo', backendStatus: 'not_required', aiEngine: 'ready', cameraStatus: 'live' });
-} else {
-  update({
-    systemStatus: 'online', backendStatus: 'not_required', dataSource: 'local',
-    aiEngine: 'loading', cameraStatus: 'off', latencyMs: 0
-  });
-  clearLocalAssessment({ stopCamera: true });
-}
+update({
+  systemStatus: 'online', backendStatus: 'not_required', dataSource: 'local',
+  aiEngine: 'loading', cameraStatus: 'off', latencyMs: 0
+});
+clearLocalAssessment({ stopCamera: true });
 renderAll();
 camera.resize();
 window.requestAnimationFrame(frame);
-if (!devSimulation) poseDetector.initialize();
+poseDetector.initialize();
 if (params.has('live')) dataSource.connect({ force: true, token: params.get('token') || undefined });
 
 window.guardian = {
-  snapshot, demo, engine, camera, poseDetector, dataSource, game,
+  snapshot, engine, camera, poseDetector, dataSource, game,
   emit: (payload) => dataSource.handleGuardianEvent(payload),
   score: (value) => update({ previousScore: guardianState.guardianScore, guardianScore: round(value, 1) }),
   connect: (token) => dataSource.connect({ force: true, token }),
@@ -506,5 +468,4 @@ window.guardian = {
 };
 window.__GUARDIAN_BOOTED__ = true;
 console.info('%c GuardianMesh ', 'background:#55c8ec;color:#071018;font-weight:700',
-  devSimulation ? 'DEV simulation enabled explicitly via ?dev=simulation.'
-    : 'local pose model loading — press Start Live Camera when ready.');
+  'YOLO26 pose model loading — press Start Live Camera when ready.');

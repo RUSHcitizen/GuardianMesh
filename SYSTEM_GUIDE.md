@@ -12,11 +12,11 @@ tune, test, or extend the project.
 
 GuardianMesh has two usable perception paths:
 
-1. **Default browser path:** a webcam or video runs through MediaPipe Pose
-   Landmarker inside the browser. JavaScript derives motion/posture features,
+1. **Default browser path:** a webcam or video runs through YOLO26-pose inside
+   the browser, via ONNX Runtime Web. JavaScript derives motion/posture features,
    advances a temporal fall state machine, calculates the Guardian Score, and
    updates the dashboard directly. This is the normal Cloudflare demo path.
-2. **Optional Python/backend path:** OpenCV and MediaPipe run in a separate
+2. **Optional Python/backend path:** OpenCV and MediaPipe Pose run in a separate
    Python process. That process derives another set of temporal features and
    scores, sends metadata to FastAPI, and FastAPI stores and broadcasts it to a
    dashboard opened with `?live`.
@@ -27,7 +27,7 @@ can proxy API and WebSocket traffic to a separately hosted FastAPI server.
 
 The Qwen2.5-Coder-14B-based model described in the README and Claude Opus 5 were
 used in the **software-development process**. Neither is in the live inference
-loop. Live perception uses MediaPipe landmarks plus transparent mathematical
+loop. Live perception uses YOLO26 keypoints plus transparent mathematical
 features, thresholds, and state transitions.
 
 ## 2. End-to-end picture
@@ -38,10 +38,10 @@ DEFAULT BROWSER PATH
 webcam/video
     |
     v
-MediaPipe Pose Landmarker (runs in browser; up to 4 poses)
+YOLO26-pose via ONNX Runtime Web (runs in browser; up to 4 people)
     |
     v
-17 selected anonymous body landmarks + bounding box
+17 anonymous COCO body keypoints + bounding box
     |
     v
 anonymous track matching (PERSON 01, PERSON 02, ...)
@@ -85,11 +85,11 @@ the real `<video>` element, and the overlay canvas.
 - **Start Live Camera** calls `navigator.mediaDevices.getUserMedia()` with an
   ideal resolution of 1280 x 720 and audio disabled.
 - **Video Test** uses a user-selected local video through an object URL.
-- The simulated feed is unavailable on the normal page. It is enabled only by
-  `?dev=simulation`.
+- There is no simulated feed at all. The synthetic scene and its canonical pose
+  library were removed, so nothing on screen can be mistaken for live inference.
 - Permission denial, a missing camera, a decode failure, or a model failure is
   shown to the user. It never silently substitutes fake people.
-- All three visual layers receive the same transform. When a critical track is
+- Both visual layers receive the same transform. When a critical track is
   present, the stage zooms 1.6x around that body so an operator can inspect it.
 
 Camera permission requires a secure context. A Cloudflare HTTPS deployment and
@@ -97,26 +97,32 @@ Camera permission requires a secure context. A Cloudflare HTTPS deployment and
 
 ### 3.2 Pose model
 
-`frontend/js/browser-pose.js` dynamically loads:
+`frontend/js/browser-pose.js` loads, all from this origin (no CDN):
 
-- MediaPipe Tasks Vision `1.0.1` from jsDelivr;
-- the matching WebAssembly files from jsDelivr; and
-- the float16 Pose Landmarker Lite model from Google's model storage.
+- the ONNX Runtime Web build in `frontend/vendor/onnxruntime/`;
+- its WebAssembly binary from the same directory; and
+- `frontend/assets/models/yolo26n-pose.onnx` (about 12 MB).
 
-The model runs in `VIDEO` mode. It tries the GPU delegate first and falls back
-to CPU if GPU initialization fails. Important settings are:
+Each frame is letterboxed into a 640x640 square with neutral grey padding, so a
+frame of any aspect ratio is scaled without distortion. The runtime prefers
+WebGPU and falls back to multi-threaded WASM; WebGPU backed by a *software*
+adapter is rejected, because it is far slower than WASM. `?ep=wasm` or
+`?ep=webgpu` forces a provider.
 
 | Setting | Current value |
 |---|---:|
-| Maximum poses | 4 |
-| Minimum pose detection confidence | 0.50 |
-| Minimum pose presence confidence | 0.50 |
-| Minimum MediaPipe tracking confidence | 0.50 |
-| GuardianMesh minimum accepted pose confidence | 0.45 |
+| Maximum people per frame | 4 |
+| Minimum detection confidence | 0.35 |
+| Minimum keypoint visibility (for motion) | 0.35 |
 | Inference interval | 80 ms (at most about 12.5 runs/second) |
-| Track expiry | 1,800 ms unseen |
+| Track match distance | 0.32 normalized |
+| Track expiry | 2,500 ms unseen |
 
-MediaPipe produces 33 landmarks. GuardianMesh keeps these 17 body points:
+The detection threshold is deliberately low. A person lying on the ground is
+detected less confidently than one standing upright, so a threshold tuned on
+standing people drops the person exactly when GuardianMesh needs them most.
+
+YOLO26 emits COCO-17 keypoints, which GuardianMesh uses directly:
 
 ```text
 nose, left/right eye, left/right ear,
@@ -125,15 +131,14 @@ left/right hip, knee, ankle
 ```
 
 Each point is `{name, x, y, confidence}`. `x` and `y` are normalized to `0..1`,
-with `(0,0)` at the image's top-left. Confidence is the smaller of MediaPipe's
-visibility and presence values.
+with `(0,0)` at the image's top-left, after mapping back out of the letterbox.
+Confidence is the model's per-keypoint visibility.
 
 ### 3.3 Bounding box
 
-Points with confidence at least `0.35` define the box when six or more are
-visible; otherwise all selected points are used. The smallest and largest x/y
-coordinates form the box, then small proportional padding is added. The result
-is also normalized:
+YOLO26 emits a person box directly, so no box is inferred from the keypoints.
+It is mapped out of the letterbox and clamped into the frame, so a body partly
+out of view yields a box that stops at the edge. The result is normalized:
 
 ```json
 {"x": 0.25, "y": 0.12, "width": 0.22, "height": 0.74}
@@ -146,8 +151,8 @@ a face identity or skeleton.
 
 ### 3.4 Anonymous multi-person tracking
 
-MediaPipe pose results do not carry a durable person ID, so the browser matches
-each new detection to an existing anonymous track.
+YOLO26 results do not carry a durable person ID, so the browser matches each
+new detection to an existing anonymous track.
 
 For every possible old/new box pair:
 
@@ -156,8 +161,9 @@ cost = 0.75 * centroid_distance + 0.25 * (1 - box_IoU)
 ```
 
 The lowest-cost unused track is selected only when normalized centroid distance
-is at most `0.28`. Unmatched detections become `PERSON 01`, `PERSON 02`, and so
-on. A track is removed after 1.8 seconds without a match. IDs are temporary
+is at most `0.32`. Unmatched detections become `PERSON 01`, `PERSON 02`, and so
+on. A track is removed after 2.5 seconds without a match, which spans the brief
+dropouts that happen as somebody goes down. IDs are temporary
 session labels, not identities, and are reset when the camera/session resets.
 
 ## 4. Browser temporal features and body-angle math
@@ -400,7 +406,7 @@ Score bands are:
 `frontend/js/app.js` owns the single application animation loop:
 
 ```text
-process a MediaPipe frame when due
+run YOLO26 on a frame when due (async; frames are skipped, not queued)
 -> update pose engine and every track's timers/state
 -> synchronize meaningful changes into shared state every 160 ms
 -> render camera/overlay
@@ -765,15 +771,15 @@ npm start
 Open `http://localhost:8080/`, press **Start Live Camera**, allow camera access,
 and remain fully visible. A backend is not required.
 
-### Explicit development simulation
+### Forcing an execution provider
 
-Open:
+The detector prefers WebGPU and falls back to multi-threaded WASM, rejecting
+WebGPU that is backed by a software adapter. To pin one for testing:
 
 ```text
-http://localhost:8080/?dev=simulation
+http://localhost:8080/?ep=wasm
+http://localhost:8080/?ep=webgpu
 ```
-
-This is synthetic test data and must not be presented as live camera inference.
 
 ### Full local Python/backend path
 

@@ -42,27 +42,45 @@ as much as training itself.
 
 ## Computer vision model
 
-GuardianMesh's default live-camera path uses Google's **MediaPipe Pose
-Landmarker Lite** model (`pose_landmarker_lite.task`, float16) through the pinned
-MediaPipe Tasks Vision `1.0.1` browser runtime. It can track up to four people
-and returns 33 anonymous body landmarks for each detected pose. GuardianMesh
-then applies its own explainable temporal logic to those landmarks: downward
-movement, torso angle, ground-level posture, immobility, recovery, and repeated
-small post-fall movements.
+GuardianMesh's live-camera path runs **YOLO26-pose** (`yolo26n-pose`) in the
+browser through **ONNX Runtime Web**. It detects up to four people at once and
+returns 17 anonymous COCO body keypoints for each, plus a person bounding box.
+GuardianMesh then applies its own explainable temporal logic to those keypoints:
+downward movement, torso angle, ground-level posture, immobility, recovery, and
+repeated small post-fall movements.
 
-The optional Python camera pipeline uses the classic **MediaPipe Pose 0.10.8**
-API and is effectively single-person. Neither camera path uses Qwen or Claude
-for live video analysis. Qwen2.5-Coder-Pi-14B and Claude Opus 5 were part of the
+YOLO26 exports end-to-end (NMS-free), so the model emits already-sorted
+`[x1, y1, x2, y2, confidence, class, 17 x (x, y, visibility)]` rows and the
+browser only has to threshold them. Both the model (~12 MB) and the runtime ship
+from this origin under `frontend/assets/models/` and `frontend/vendor/onnxruntime/`
+— a hackathon venue network is the least reliable part of any demo, and a
+detector that cannot download itself is a detector that does not run.
+
+The optional Python camera pipeline still uses MediaPipe Pose 0.10.8 and is
+effectively single-person; it is a separate, optional path and is not what the
+browser demo runs. Neither camera path uses Qwen or Claude for live video
+analysis. Qwen2.5-Coder-Pi-14B and Claude Opus 5 were part of the
 software-development process; no generative AI model watches the camera feed.
 Frames remain local, and the system does not perform facial recognition,
 identity matching, or medical diagnosis.
 
 | Where | Model | Settings | Code |
 |---|---|---|---|
-| Browser (default) | MediaPipe Pose Landmarker Lite | float16, up to 4 people, 33 landmarks | `frontend/js/browser-pose.js`, `frontend/js/config.js` |
+| Browser (default) | YOLO26-pose (`yolo26n-pose.onnx`) | 640x640, up to 4 people, 17 COCO keypoints | `frontend/js/browser-pose.js`, `frontend/js/config.js` |
 | Python pipeline (optional) | MediaPipe Pose (`mp.solutions.pose`) | `model_complexity=1` (full model), one person | `ai_cv/pose_tracker.py` |
 
-MediaPipe is the only computer vision model. Everything after pose estimation
+**Execution provider.** The browser prefers WebGPU and falls back to
+multi-threaded WASM. It deliberately *rejects* WebGPU backed by a software
+adapter (SwiftShader, llvmpipe, "Basic Render"): a browser will happily report
+WebGPU support that is slower than WASM by two orders of magnitude. Force one
+with `?ep=wasm` or `?ep=webgpu`. Threads need cross-origin isolation, which
+`frontend/_headers` and `worker.js` both set.
+
+**Licence note.** Ultralytics YOLO26 is AGPL-3.0. That suits this repository,
+which is source-available, but it is worth knowing before reusing the model in a
+closed-source product.
+
+The detector is the only computer vision model. Everything after pose estimation
 is rule-based, with hand-set thresholds rather than a trained classifier:
 
 - **Browser:** `frontend/js/fall-detector.js` is a temporal state machine
@@ -83,8 +101,9 @@ but are not imported anywhere; scikit-learn is used only by
 # Frontend — command center
 
 Plain **HTML5 + CSS3 + vanilla JavaScript (ES modules)**. No framework, no build
-step or installed frontend dependencies. The page fetches a pinned MediaPipe
-Tasks runtime and pose model. Architecture write-up: **[ARCHITECTURE.md](ARCHITECTURE.md)**.
+step or installed frontend dependencies. The YOLO26 model and the ONNX runtime
+are served from this origin, so the page needs no CDN.
+Architecture write-up: **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
 ## Run the frontend
 
@@ -116,14 +135,18 @@ column under 1080px.
 | Start / stop | **START LIVE CAMERA** button, or press <kbd>D</kbd> |
 | Reset everything | **RESET** button, or press <kbd>R</kbd> |
 
-The default path requests the actual device camera and runs MediaPipe Pose
-Landmarker locally in the browser. Frames stay on the device. Anonymous
-landmarks feed temporal fall detection, Guardian Score, timeline, incidents,
-and the existing response workflow. A backend is not required.
+**START LIVE CAMERA** requests the actual device camera and runs YOLO26-pose
+locally in the browser. Frames stay on the device. Anonymous keypoints feed
+temporal fall detection, Guardian Score, timeline, incidents, and the response
+workflow. A backend is not required.
 
-Camera/model failures stay visible and never fall back to fake people. The old
-scripted story is test-only at `/?dev=simulation`; that flag is never enabled by
-the main hackathon page.
+Everyone in frame is tracked independently, so more than one person can be
+assessed at the same time and anybody who falls or shows a distress pattern is
+picked up — not just a designated subject.
+
+Camera or model failures stay visible. There is no synthetic feed and no
+scripted story to fall back on: every track on screen came from the camera, or
+there are no tracks at all.
 
 ## Deploying the dashboard (Cloudflare)
 
@@ -168,8 +191,8 @@ that still exposes the `mp.solutions` API `ai_cv/pose_tracker.py` is built on �
 verified: `0.10.30` and `1.0.1` both drop it and crash the tracker at startup.
 Raising the pin would trade a visible build failure for a silent runtime one.
 
-**What gets deployed.** The browser downloads the pinned MediaPipe Tasks runtime
-and pose model, then performs inference locally. The FastAPI backend is not part
+**What gets deployed.** The YOLO26 model and the ONNX runtime are deployed with
+the site and inference runs locally in the browser. The FastAPI backend is not part
 of this static Worker, so the header accurately says **Backend: Not required**.
 `?live` remains available only when a separately deployed HTTPS/WSS backend is
 configured; an HTTPS page cannot connect to `http://127.0.0.1:8000`.
@@ -190,11 +213,10 @@ frontend/
 │   ├── state.js             shared state object + pub/sub + action vocabulary
 │   ├── config.js            endpoints, thresholds, score bands, video source
 │   ├── util.js              DOM/math helpers
-│   ├── camera.js            camera stage: simulated / webcam / video file, error states
-│   ├── browser-pose.js       MediaPipe Pose Landmarker + anonymous multi-person tracking
-│   ├── fall-detector.js      temporal fall state machine
-│   ├── scene.js             simulated CCTV scene renderer (canvas)
-│   ├── pose-engine.js       pose interpolation + temporal feature derivation
+│   ├── camera.js            camera stage: webcam / video file, error states
+│   ├── browser-pose.js      YOLO26-pose via ONNX Runtime Web + anonymous multi-person tracking
+│   ├── fall-detector.js     temporal fall state machine
+│   ├── pose-engine.js       temporal feature derivation over observed keypoints
 │   ├── pose-overlay.js      yellow anonymous person-detection boxes
 │   ├── guardian-score.js    Guardian Score panel + live severity model
 │   ├── timeline.js          AI reasoning timeline
@@ -202,28 +224,25 @@ frontend/
 │   ├── mesh.js              camera/sensor nodes, corroboration, anonymous handoff
 │   ├── response.js          simulated response mesh + recommended response
 │   ├── system-header.js     system health rail
-│   ├── demo.js              deterministic Demo Mode controller
 │   ├── datasource.js        backend adapter: normalises events into state actions
 │   └── websocket.js         vanilla WebSocket transport with bounded backoff
 ├── data/
-│   ├── mock-events.js       ALL demo data: cameras, sensors, responders, copy, corroboration
-│   ├── pose-library.js      canonical poses, skeleton edges, body states
-│   └── (demo sequence lives in js/demo.js as timed steps)
-└── assets/video/            drop demo footage here (see CONFIG.VIDEO_SOURCE_URL)
+│   └── mock-events.js       interface copy + the simulated responder roster
+├── assets/
+│   ├── models/              yolo26n-pose.onnx (the detector, served from this origin)
+│   └── video/               drop demo footage here (see CONFIG.VIDEO_SOURCE_URL)
+└── vendor/onnxruntime/      pinned ONNX Runtime Web build + its wasm binary
 ```
 
 ## Camera / video integration
 
 Lives in **`js/camera.js`** and **`js/browser-pose.js`**:
 
-1. **Webcam** (default demo) — `getUserMedia` frames go directly to MediaPipe.
-   Permission/model failures remain visible and do not trigger simulation.
-2. **Video test** — pick a local recording to test the same real inference path,
-   or set
-   `CONFIG.VIDEO_SOURCE_URL = 'assets/video/corridor.mp4'` in `js/config.js` to
-   load footage on boot.
-3. **DEV simulation** — available only at `/?dev=simulation` for deterministic
-   automated/UI development.
+1. **Webcam** (default demo) — `getUserMedia` frames go straight to YOLO26.
+   Permission and model failures remain visible; nothing is simulated in their place.
+2. **Video test** — pick a local recording to exercise the same real inference
+   path, or set `CONFIG.VIDEO_SOURCE_URL = 'assets/video/corridor.mp4'` in
+   `js/config.js` to load footage on boot.
 
 The overlay is source-agnostic: `overlay.setContentSource(videoEl)` computes the
 displayed media rect (including `object-fit: cover` letterboxing) so normalised
@@ -241,7 +260,7 @@ window.guardian.engine.applyExternalTrack({
   boundingBox: { x: 0.31, y: 0.28, width: 0.17, height: 0.52 },
   keypoints: [
     { name: "left_shoulder", x: 0.42, y: 0.31, confidence: 0.97 }
-    // COCO-17 names, see data/pose-library.js → KEYPOINT_NAMES
+    // COCO-17 names, see js/browser-pose.js → KEYPOINT_NAMES
   ],
   status: "warning",               // normal | tracking | observing | warning | critical
   label: "Possible fall",          // shown on the AR label
@@ -250,7 +269,7 @@ window.guardian.engine.applyExternalTrack({
 });
 ```
 
-* `keypoints[].name` must use the COCO-17 names in `data/pose-library.js`.
+* `keypoints[].name` must use the COCO-17 names in `js/browser-pose.js`.
 * If you omit `boundingBox`, it is derived from the keypoints.
 * If you omit `features`, the engine derives vertical velocity, motion magnitude,
   body angle, ground duration and time-since-movement from consecutive samples.
@@ -371,8 +390,8 @@ Then open **<http://localhost:8080/?live>**.
 
 | URL | Data source |
 |---|---|
-| `http://localhost:8080/` | Real local MediaPipe model + live device camera |
-| `http://localhost:8080/?dev=simulation` | Explicit scripted DEV fixture |
+| `http://localhost:8080/` | Local YOLO26-pose model + live device camera |
+| `http://localhost:8080/?ep=wasm` | Same, forcing the WASM execution provider |
 | `http://localhost:8080/?live` | Attaches the live backend |
 | `http://localhost:8080/?live&token=…` | Attaches a token-protected backend |
 

@@ -2,3 +2,15 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(self), microphone=(), geolocation=(self)
+  # Cross-origin isolation lets ONNX Runtime Web use SharedArrayBuffer, which is
+  # what makes multi-threaded WASM inference available when WebGPU is not. Safe
+  # here because the page loads no cross-origin resource of any kind: the YOLO26
+  # model and the runtime are both served from this origin.
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+
+/vendor/onnxruntime/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/models/*
+  Cache-Control: public, max-age=31536000, immutable

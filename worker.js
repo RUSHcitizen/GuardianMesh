@@ -91,9 +91,28 @@ export default {
       return json({ incidents: [], total: 0 });
     }
 
-    return env.ASSETS.fetch(request);
+    return withCrossOriginIsolation(await env.ASSETS.fetch(request));
   }
 };
+
+/**
+ * ONNX Runtime Web can only use SharedArrayBuffer — and therefore multi-threaded
+ * WASM inference — on a cross-origin-isolated page. frontend/_headers asks for
+ * these too; setting them here as well means the detector keeps its threads
+ * even if the asset layer ever stops applying that file. Safe because the page
+ * loads no cross-origin resource: the YOLO26 model and the ONNX runtime are
+ * both served from this origin.
+ */
+function withCrossOriginIsolation(response) {
+  const headers = new Headers(response.headers);
+  headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+  headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers
+  });
+}
 
 function json(value, status = 200) {
   return new Response(JSON.stringify(value), {

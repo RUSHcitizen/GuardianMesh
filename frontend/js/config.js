@@ -14,32 +14,52 @@ const IS_LOCAL_FRONTEND = typeof window !== 'undefined'
 
 export const CONFIG = {
   /**
-   * The hackathon path is real browser-side inference. Scripted people remain
-   * available only at /?dev=simulation so a projector can never silently show
-   * synthetic detections after a camera or model failure.
+   * Vendored YOLO26 pose model + ONNX Runtime Web.
+   *
+   * Both ship with the site rather than loading from a CDN: a hackathon venue
+   * network is the least reliable part of the demo, and a detector that cannot
+   * download itself is a detector that does not run. Paths resolve against
+   * frontend/js/, so they survive being served from any sub-path.
+   *
+   * YOLO26 exports end-to-end (NMS-free): the model emits [1, 300, 57] rows of
+   * [x1, y1, x2, y2, confidence, class, 17 x (x, y, visibility)] already sorted
+   * by confidence, so the browser only has to threshold them.
    */
-  DEV_SIMULATION_QUERY: 'simulation',
-
-  /** Pinned MediaPipe Tasks runtime + model for reproducible deployments. */
   POSE_MODEL: {
-    runtimeUrl: 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/vision_bundle.mjs',
-    wasmRoot: 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm',
-    modelUrl: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
+    modelUrl: new URL('../assets/models/yolo26n-pose.onnx', import.meta.url).href,
+    runtimeUrl: new URL('../vendor/onnxruntime/ort.webgpu.bundle.min.mjs', import.meta.url).href,
+    wasmRoot: new URL('../vendor/onnxruntime/', import.meta.url).href,
+    /** Square letterbox size the model was exported at. Do not change alone. */
+    inputSize: 640,
+    /** Execution providers tried in order; the first that builds a session wins. */
+    executionProviders: ['webgpu', 'wasm'],
     maxPoses: 4,
     inferenceIntervalMs: 80,
-    minPoseDetectionConfidence: 0.5,
-    minPosePresenceConfidence: 0.5,
-    minTrackingConfidence: 0.5,
+    /**
+     * Deliberately low. A person lying on the ground is detected with less
+     * confidence than one standing upright — they are foreshortened, partly
+     * occluded, and an unusual orientation — so a threshold tuned on standing
+     * people drops the person exactly when GuardianMesh needs them most.
+     * Recall matters more than precision here: a spurious track costs a
+     * moment of operator attention, a dropped one loses the whole incident.
+     */
+    minPoseDetectionConfidence: 0.35,
     minLandmarkVisibility: 0.35,
-    trackMatchDistance: 0.28,
-    trackExpireMs: 1800
+    trackMatchDistance: 0.32,
+    /**
+     * A track survives this long without a detection. It spans the brief
+     * dropouts that happen as somebody goes down, so the temporal evidence
+     * built up before a fall is not thrown away mid-incident.
+     */
+    trackExpireMs: 2500
   },
+
   /**
    * Flip to true once a backend is actually running.
    *
    * While this is false the frontend makes no backend requests. Local pose
-   * inference still fetches the pinned MediaPipe runtime and model. Avoiding a
-   * reachability probe also keeps expected 404 noise out of the demo console.
+   * inference needs none — the model and runtime are served from this origin.
+   * Avoiding a reachability probe also keeps 404 noise out of the demo console.
    *
    * You do not have to edit this file to test a live backend: run
    * window.guardian.connect() in the console and it connects immediately.
